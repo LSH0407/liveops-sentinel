@@ -158,3 +158,9 @@ logs/
 deploy.bat
 deploy.ps1
 build_local.bat
+fix_release.bat
+fix_workflow.bat
+fix_workflow_final.bat
+fix_vcpkg_final.bat
+fix_cmake_final.bat
+create_release_now.bat

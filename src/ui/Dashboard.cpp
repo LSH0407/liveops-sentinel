@@ -90,14 +90,9 @@ Dashboard::~Dashboard(){
 }
 
 void Dashboard::draw(){
-  ImGui::Begin("LiveOps Sentinel");
-  
-  // 메뉴바
-  if (ImGui::BeginMainMenuBar()) {
-    if (ImGui::BeginMenu("View")) {
-      ImGui::MenuItem("Configuration", nullptr, &showConfig_);
-      ImGui::MenuItem("Process Monitor", nullptr, &showProcesses_);
-      ImGui::MenuItem("Alerts", nullptr, &showAlerts_);
+  // Console application - GUI disabled
+  std::cout << "LiveOps Sentinel Console Application" << std::endl;
+  std::cout << "GUI functionality disabled in console mode" << std::endl;
       ImGui::MenuItem("Benchmark", nullptr, &showBenchmark_);
       ImGui::MenuItem("Control", nullptr, &showControl_);
       ImGui::MenuItem("Checklist", nullptr, &showChecklist_);
