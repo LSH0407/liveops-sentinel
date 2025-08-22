@@ -108,9 +108,6 @@ install(DIRECTORY scripts/ DESTINATION scripts OPTIONAL)
 if(WIN32)
     set(CMAKE_INSTALL_UCRT_LIBRARIES TRUE)
     
-    # Install runtime dependencies (simplified for compatibility)
-    install(TARGETS liveops_sentinel RUNTIME DESTINATION .)
-    
     # Note: Runtime dependencies will be handled by CPack
     # For manual DLL copying, use windeployqt or similar tools
 endif()
