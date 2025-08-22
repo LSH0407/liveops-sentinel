@@ -108,40 +108,11 @@ install(DIRECTORY scripts/ DESTINATION scripts OPTIONAL)
 if(WIN32)
     set(CMAKE_INSTALL_UCRT_LIBRARIES TRUE)
     
-    # Install runtime dependencies (CMake 3.21+)
-    install(TARGETS liveops_sentinel
-        RUNTIME_DEPENDENCY_SET deps
-        RUNTIME DESTINATION .
-    )
+    # Install runtime dependencies (simplified for compatibility)
+    install(TARGETS liveops_sentinel RUNTIME DESTINATION .)
     
-    # Get runtime dependencies and install them
-    file(GET_RUNTIME_DEPENDENCIES
-        TARGETS liveops_sentinel
-        RESOLVED_DEPENDENCIES_VAR resolved_deps
-        UNRESOLVED_DEPENDENCIES_VAR unresolved_deps
-        CONFLICTING_DEPENDENCIES_PREFIX conflicting_deps
-        EXECUTABLES
-            $<TARGET_FILE:liveops_sentinel>
-        LIBRARIES
-            $<TARGET_FILE:liveops_sentinel>
-        DIRECTORIES
-            $<TARGET_FILE_DIR:liveops_sentinel>
-    )
-    
-    # Install resolved dependencies, excluding system DLLs
-    foreach(dep ${resolved_deps})
-        get_filename_component(dep_name "${dep}" NAME)
-        string(TOLOWER "${dep_name}" dep_name_lower)
-        
-        # Skip system DLLs
-        if(NOT dep_name_lower MATCHES "^(api-ms-win|vcruntime|msvcp|ucrt|kernel32|user32|gdi32|shell32|ole32|oleaut32|uuid|advapi32|ws2_32|iphlpapi|winmm|version|psapi|oleacc|uxtheme|dwmapi|d3d|dxgi|dinput|dwrite|d2d1|d3dcompiler|d3dx|system32|syswow64)")
-            install(FILES "${dep}" DESTINATION .)
-        endif()
-    endforeach()
-    
-    if(unresolved_deps)
-        message(WARNING "Unresolved dependencies: ${unresolved_deps}")
-    endif()
+    # Note: Runtime dependencies will be handled by CPack
+    # For manual DLL copying, use windeployqt or similar tools
 endif()
 
 # CPack configuration
