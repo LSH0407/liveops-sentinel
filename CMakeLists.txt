@@ -10,8 +10,6 @@ if(EXISTS "C:/vcpkg/scripts/buildsystems/vcpkg.cmake")
 endif()
 
 # Required packages
-find_package(SDL2 CONFIG REQUIRED)
-find_package(imgui CONFIG REQUIRED)
 find_package(asio CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
@@ -46,8 +44,6 @@ add_executable(liveops_sentinel
 target_include_directories(liveops_sentinel PRIVATE src)
 
 target_link_libraries(liveops_sentinel PRIVATE
-  SDL2::SDL2 SDL2::SDL2main
-  imgui::imgui
   asio::asio
   nlohmann_json::nlohmann_json
   spdlog::spdlog
@@ -58,7 +54,6 @@ target_link_libraries(liveops_sentinel PRIVATE
 # OBS WebSocket features are disabled
 
 if (WIN32)
-  target_link_libraries(liveops_sentinel PRIVATE opengl32)
   target_compile_definitions(liveops_sentinel PRIVATE _WIN32_WINNT=0x0601)
 else()
   target_link_libraries(liveops_sentinel PRIVATE pthread)
