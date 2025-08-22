@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(liveops_sentinel LANGUAGES CXX)
+project(liveops_sentinel VERSION 0.2.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -98,4 +98,84 @@ if(Python3_FOUND)
     )
 else()
     message(WARNING "Python3 not found - inject_repo_url target not available")
+endif()
+
+# Install rules
+install(TARGETS liveops_sentinel RUNTIME DESTINATION .)
+
+# Install resources
+install(FILES assets/config.example.json DESTINATION .)
+install(FILES LICENSE README.md DESTINATION . OPTIONAL)
+install(DIRECTORY scripts/ DESTINATION scripts OPTIONAL)
+
+# Windows runtime dependencies
+if(WIN32)
+    set(CMAKE_INSTALL_UCRT_LIBRARIES TRUE)
+    
+    # Install runtime dependencies (CMake 3.21+)
+    install(TARGETS liveops_sentinel
+        RUNTIME_DEPENDENCY_SET deps
+        RUNTIME DESTINATION .
+    )
+    
+    # Get runtime dependencies and install them
+    file(GET_RUNTIME_DEPENDENCIES
+        TARGETS liveops_sentinel
+        RESOLVED_DEPENDENCIES_VAR resolved_deps
+        UNRESOLVED_DEPENDENCIES_VAR unresolved_deps
+        CONFLICTING_DEPENDENCIES_PREFIX conflicting_deps
+        EXECUTABLES
+            $<TARGET_FILE:liveops_sentinel>
+        LIBRARIES
+            $<TARGET_FILE:liveops_sentinel>
+        DIRECTORIES
+            $<TARGET_FILE_DIR:liveops_sentinel>
+    )
+    
+    # Install resolved dependencies, excluding system DLLs
+    foreach(dep ${resolved_deps})
+        get_filename_component(dep_name "${dep}" NAME)
+        string(TOLOWER "${dep_name}" dep_name_lower)
+        
+        # Skip system DLLs
+        if(NOT dep_name_lower MATCHES "^(api-ms-win|vcruntime|msvcp|ucrt|kernel32|user32|gdi32|shell32|ole32|oleaut32|uuid|advapi32|ws2_32|iphlpapi|winmm|version|psapi|oleacc|uxtheme|dwmapi|d3d|dxgi|dinput|dwrite|d2d1|d3dcompiler|d3dx|system32|syswow64)")
+            install(FILES "${dep}" DESTINATION .)
+        endif()
+    endforeach()
+    
+    if(unresolved_deps)
+        message(WARNING "Unresolved dependencies: ${unresolved_deps}")
+    endif()
+endif()
+
+# CPack configuration
+include(CPack)
+set(CPACK_PACKAGE_NAME "LiveOps Sentinel")
+set(CPACK_PACKAGE_VENDOR "LSH0407")
+set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "UE/OBS 라이브 송출 품질 모니터링 도구")
+set(CPACK_PACKAGE_DESCRIPTION "라이브 스트리밍 환경에서 네트워크 품질과 OBS Studio 상태를 실시간으로 모니터링하여 안정적인 송출을 보장하는 도구입니다.")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE")
+set(CPACK_RESOURCE_FILE_README "${CMAKE_SOURCE_DIR}/README.md")
+
+# ZIP generator (primary)
+set(CPACK_GENERATOR "ZIP")
+set(CPACK_PACKAGE_FILE_NAME "LiveOpsSentinel-${PROJECT_VERSION}-win-x64")
+
+# NSIS generator (optional, for Windows installer)
+if(WIN32)
+    set(CPACK_GENERATOR "${CPACK_GENERATOR};NSIS")
+    set(CPACK_NSIS_PACKAGE_NAME "LiveOps Sentinel")
+    set(CPACK_NSIS_DISPLAY_NAME "LiveOps Sentinel ${PROJECT_VERSION}")
+    set(CPACK_NSIS_CONTACT "https://github.com/LSH0407/liveops-sentinel")
+    set(CPACK_NSIS_URL_INFO_ABOUT "https://github.com/LSH0407/liveops-sentinel")
+    set(CPACK_NSIS_ENABLE_ICON_EXTRA "https://github.com/LSH0407/liveops-sentinel")
+    set(CPACK_NSIS_MUI_ICON "${CMAKE_SOURCE_DIR}/assets/icon.ico")
+    set(CPACK_NSIS_MUI_UNIICON "${CMAKE_SOURCE_DIR}/assets/icon.ico")
+    set(CPACK_NSIS_INSTALLED_ICON_NAME "liveops_sentinel.exe")
+    set(CPACK_NSIS_EXECUTABLES_DIRECTORY ".")
+    set(CPACK_NSIS_MENU_LINKS
+        "https://github.com/LSH0407/liveops-sentinel" "GitHub Repository"
+        "https://github.com/LSH0407/liveops-sentinel/releases" "Latest Releases"
+    )
 endif()

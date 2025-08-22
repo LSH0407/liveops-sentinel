@@ -1,5 +1,25 @@
-# Prerequisites
-*.d
+# Build directories
+build/
+out/
+Debug/
+Release/
+x64/
+x86/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# IDE files
+.vs/
+.vscode/
+*.vcxproj.user
+*.vcxproj.filters
+*.sln.docstates
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
 
 # Compiled Object files
 *.slo
@@ -11,20 +31,10 @@
 *.gch
 *.pch
 
-# Linker files
-*.ilk
-
-# Debugger Files
-*.pdb
-
 # Compiled Dynamic libraries
 *.so
 *.dylib
 *.dll
-
-# Fortran module files
-*.mod
-*.smod
 
 # Compiled Static libraries
 *.lai
@@ -37,5 +47,109 @@
 *.out
 *.app
 
-# debug information files
-*.dwo
+# Debug files
+*.pdb
+*.ilk
+*.exp
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Log files
+*.log
+logs/
+
+# Configuration files (may contain sensitive data)
+config.json
+*.config
+assets/config.json
+
+# Reports and data files
+reports/
+*.csv
+*.json
+!config.example.json
+
+# vcpkg
+vcpkg_installed/
+
+# Temporary files
+*.tmp
+*.temp
+*~
+
+# Backup files
+*.bak
+*.backup
+
+# Package files
+*.zip
+*.tar.gz
+*.rar
+*.7z
+*.msi
+*.deb
+*.rpm
+
+# Documentation build
+docs/_build/
+docs/html/
+
+# Test coverage
+coverage/
+*.gcov
+*.gcda
+*.gcno
+
+# Profiling data
+*.prof
+*.gprof
+
+# Memory dumps
+*.dmp
+*.mdmp
+
+# Crash reports
+crash_reports/
+
+# Build artifacts
+dist/
+build/
+*.zip
+*.tar.gz
+*.exe
+*.dll
+*.so
+*.dylib
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+logs/
+
+# Package files
+*.7z
+*.rar
+*.msi
+*.deb
+*.rpm

@@ -1,0 +1,215 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (e.g., 0.2.0)'
+        required: true
+        default: '0.2.0'
+      platform:
+        description: 'Platform to build'
+        required: true
+        default: 'windows'
+        type: choice
+        options:
+          - windows
+          - linux
+          - all
+
+env:
+  VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+
+jobs:
+  build-windows:
+    if: github.event_name == 'push' || github.event.inputs.platform == 'windows' || github.event.inputs.platform == 'all'
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        build-type: [Release]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Setup vcpkg
+      uses: lukka/run-vcpkg@v11
+      with:
+        vcpkgGitCommitId: '2024.01.12'
+        vcpkgDirectory: ${{ env.VCPKG_ROOT }}
+    
+    - name: Install vcpkg dependencies
+      run: |
+        ${{ env.VCPKG_ROOT }}/vcpkg install sdl2 imgui asio nlohmann-json spdlog websocketpp doctest
+        ${{ env.VCPKG_ROOT }}/vcpkg integrate install
+    
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Inject repository URL
+      run: |
+        python scripts/inject_repo_url.py
+    
+    - name: Configure CMake
+      run: |
+        cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake -DCMAKE_BUILD_TYPE=${{ matrix.build-type }}
+    
+    - name: Build
+      run: |
+        cmake --build build --config ${{ matrix.build-type }} --parallel
+    
+    - name: Test
+      run: |
+        ctest --test-dir build --output-on-failure
+      continue-on-error: true
+    
+    - name: Install
+      run: |
+        cmake --install build --config ${{ matrix.build-type }} --prefix dist
+    
+    - name: Code signing (if available)
+      if: secrets.SIGN_CERT_BASE64 != ''
+      run: |
+        try {
+          $certBytes = [Convert]::FromBase64String("${{ secrets.SIGN_CERT_BASE64 }}")
+          [IO.File]::WriteAllBytes("cert.pfx", $certBytes)
+          
+          & "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\signtool.exe" sign /fd SHA256 /a /f cert.pfx /p "${{ secrets.SIGN_CERT_PASSWORD }}" dist/liveops_sentinel.exe
+          
+          Remove-Item "cert.pfx" -Force
+          Write-Host "Code signing completed successfully"
+        }
+        catch {
+          Write-Warning "Code signing failed: $($_.Exception.Message)"
+        }
+    
+    - name: Create package
+      run: |
+        cpack --config build/CPackConfig.cmake
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: LiveOpsSentinel-windows-${{ matrix.build-type }}
+        path: |
+          dist/
+          *.zip
+          *.exe
+        retention-days: 30
+    
+    - name: Get version
+      id: meta
+      run: |
+        $version = (Get-Content CMakeLists.txt | Select-String "project\(.*VERSION\s+([0-9.]+)" | ForEach-Object { $_.Matches.Groups[1].Value })
+        if (-not $version) {
+          $version = "${{ github.event.inputs.version || '0.2.0' }}"
+        }
+        echo "version=$version" >> $env:GITHUB_OUTPUT
+    
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          LiveOpsSentinel-${{ steps.meta.outputs.version }}-win-x64.zip
+          dist/liveops_sentinel.exe
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-linux:
+    if: github.event_name == 'push' || github.event.inputs.platform == 'linux' || github.event.inputs.platform == 'all'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        build-type: [Release]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Setup vcpkg
+      uses: lukka/run-vcpkg@v11
+      with:
+        vcpkgGitCommitId: '2024.01.12'
+        vcpkgDirectory: ${{ env.VCPKG_ROOT }}
+    
+    - name: Install vcpkg dependencies
+      run: |
+        ${{ env.VCPKG_ROOT }}/vcpkg install sdl2 imgui asio nlohmann-json spdlog websocketpp doctest
+        ${{ env.VCPKG_ROOT }}/vcpkg integrate install
+    
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libgl1-mesa-dev libglu1-mesa-dev libasound2-dev
+    
+    - name: Inject repository URL
+      run: |
+        python3 scripts/inject_repo_url.py
+    
+    - name: Configure CMake
+      run: |
+        cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake -DCMAKE_BUILD_TYPE=${{ matrix.build-type }}
+    
+    - name: Build
+      run: |
+        cmake --build build --config ${{ matrix.build-type }} --parallel
+    
+    - name: Test
+      run: |
+        ctest --test-dir build --output-on-failure
+      continue-on-error: true
+    
+    - name: Install
+      run: |
+        cmake --install build --config ${{ matrix.build-type }} --prefix dist
+    
+    - name: Create package
+      run: |
+        cpack --config build/CPackConfig.cmake -G TGZ
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: LiveOpsSentinel-linux-${{ matrix.build-type }}
+        path: |
+          dist/
+          *.tar.gz
+          liveops_sentinel
+        retention-days: 30
+    
+    - name: Get version
+      id: meta
+      run: |
+        version=$(grep -o 'project(.*VERSION [0-9.]*' CMakeLists.txt | grep -o '[0-9.]*' || echo "${{ github.event.inputs.version || '0.2.0' }}")
+        echo "version=$version" >> $GITHUB_OUTPUT
+    
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          LiveOpsSentinel-${{ steps.meta.outputs.version }}-linux-x64.tar.gz
+          dist/liveops_sentinel
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
