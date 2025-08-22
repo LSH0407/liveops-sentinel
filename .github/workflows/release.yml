@@ -74,21 +74,7 @@ jobs:
       run: |
         cmake --install build --config ${{ matrix.build-type }} --prefix dist
     
-    - name: Code signing (if available)
-      if: secrets.SIGN_CERT_BASE64 != ''
-      run: |
-        try {
-          $certBytes = [Convert]::FromBase64String("${{ secrets.SIGN_CERT_BASE64 }}")
-          [IO.File]::WriteAllBytes("cert.pfx", $certBytes)
-          
-          & "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\signtool.exe" sign /fd SHA256 /a /f cert.pfx /p "${{ secrets.SIGN_CERT_PASSWORD }}" dist/liveops_sentinel.exe
-          
-          Remove-Item "cert.pfx" -Force
-          Write-Host "Code signing completed successfully"
-        }
-        catch {
-          Write-Warning "Code signing failed: $($_.Exception.Message)"
-        }
+    # Code signing removed for now - can be added later if needed
     
     - name: Create packages
       run: |
