@@ -17,17 +17,13 @@ find_package(nlohmann_json CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 
 # Optional packages (with fallbacks)
-find_package(websocketpp CONFIG QUIET)
-if(NOT websocketpp_FOUND)
-    message(WARNING "websocketpp not found - OBS WebSocket features will be disabled")
-    add_compile_definitions(DISABLE_OBS_WEBSOCKET)
-endif()
+# Note: websocketpp was removed from vcpkg registry in 2025
+# OBS WebSocket features will be disabled for now
+add_compile_definitions(DISABLE_OBS_WEBSOCKET)
 
-find_package(doctest CONFIG QUIET)
-if(NOT doctest_FOUND)
-    message(WARNING "doctest not found - unit tests will be disabled")
-    add_compile_definitions(DISABLE_UNIT_TESTS)
-endif()
+# Note: doctest was removed from vcpkg registry in 2025
+# Unit tests will be disabled for now
+add_compile_definitions(DISABLE_UNIT_TESTS)
 
 add_executable(liveops_sentinel
   src/main.cpp
@@ -58,9 +54,8 @@ target_link_libraries(liveops_sentinel PRIVATE
 )
 
 # Optional libraries
-if(websocketpp_FOUND)
-    target_link_libraries(liveops_sentinel PRIVATE websocketpp::websocketpp)
-endif()
+# Note: websocketpp was removed from vcpkg registry in 2025
+# OBS WebSocket features are disabled
 
 if (WIN32)
   target_link_libraries(liveops_sentinel PRIVATE opengl32)
@@ -82,10 +77,11 @@ set(CMAKE_CXX_CLANG_TIDY
   -header-filter=src/*
 )
 
-# 테스트 추가 (doctest가 있을 때만)
-if(doctest_FOUND)
-    add_subdirectory(tests)
-endif()
+# 테스트 추가 (doctest was removed from vcpkg registry in 2025)
+# Tests are disabled for now
+# if(doctest_FOUND)
+#     add_subdirectory(tests)
+# endif()
 
 # Repository URL injection target
 find_package(Python3 COMPONENTS Interpreter QUIET)

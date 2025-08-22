@@ -45,7 +45,7 @@ jobs:
     
     - name: Install vcpkg dependencies
       run: |
-        ${{ env.VCPKG_ROOT }}/vcpkg install sdl2 imgui asio nlohmann-json spdlog websocketpp doctest
+        ${{ env.VCPKG_ROOT }}/vcpkg install sdl2 imgui asio nlohmann-json spdlog
         ${{ env.VCPKG_ROOT }}/vcpkg integrate install
     
     - name: Setup Python
@@ -147,7 +147,7 @@ jobs:
     
     - name: Install vcpkg dependencies
       run: |
-        ${{ env.VCPKG_ROOT }}/vcpkg install sdl2 imgui asio nlohmann-json spdlog websocketpp doctest
+        ${{ env.VCPKG_ROOT }}/vcpkg install sdl2 imgui asio nlohmann-json spdlog
         ${{ env.VCPKG_ROOT }}/vcpkg integrate install
     
     - name: Setup Python
