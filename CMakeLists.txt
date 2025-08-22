@@ -165,13 +165,43 @@ if(WIN32)
     set(CPACK_NSIS_DISPLAY_NAME "LiveOps Sentinel ${PROJECT_VERSION}")
     set(CPACK_NSIS_CONTACT "https://github.com/LSH0407/liveops-sentinel")
     set(CPACK_NSIS_URL_INFO_ABOUT "https://github.com/LSH0407/liveops-sentinel")
+    set(CPACK_NSIS_URL_UPDATE_INFO "https://github.com/LSH0407/liveops-sentinel/releases")
+    set(CPACK_NSIS_HELP_LINK "https://github.com/LSH0407/liveops-sentinel")
     set(CPACK_NSIS_ENABLE_ICON_EXTRA "https://github.com/LSH0407/liveops-sentinel")
-    set(CPACK_NSIS_MUI_ICON "${CMAKE_SOURCE_DIR}/assets/icon.ico")
-    set(CPACK_NSIS_MUI_UNIICON "${CMAKE_SOURCE_DIR}/assets/icon.ico")
-    set(CPACK_NSIS_INSTALLED_ICON_NAME "liveops_sentinel.exe")
+    
+    # Icon settings (if icon exists)
+    if(EXISTS "${CMAKE_SOURCE_DIR}/assets/icon.ico")
+        set(CPACK_NSIS_MUI_ICON "${CMAKE_SOURCE_DIR}/assets/icon.ico")
+        set(CPACK_NSIS_MUI_UNIICON "${CMAKE_SOURCE_DIR}/assets/icon.ico")
+        set(CPACK_NSIS_INSTALLED_ICON_NAME "liveops_sentinel.exe")
+    endif()
+    
+    # Installation settings
     set(CPACK_NSIS_EXECUTABLES_DIRECTORY ".")
+    set(CPACK_NSIS_MODIFY_PATH ON)
+    set(CPACK_NSIS_ENABLE_ICON_EXTRA ON)
+    set(CPACK_NSIS_DISPLAY_NAME "LiveOps Sentinel ${PROJECT_VERSION}")
+    set(CPACK_NSIS_PACKAGE_NAME "LiveOps Sentinel")
+    
+    # Start menu shortcuts
     set(CPACK_NSIS_MENU_LINKS
+        "liveops_sentinel.exe" "LiveOps Sentinel"
         "https://github.com/LSH0407/liveops-sentinel" "GitHub Repository"
         "https://github.com/LSH0407/liveops-sentinel/releases" "Latest Releases"
     )
+    
+    # NSIS script customization
+    set(CPACK_NSIS_EXTRA_INSTALL_COMMANDS "
+        CreateDirectory \\\"$SMPROGRAMS\\\\LiveOps Sentinel\\\"
+        CreateShortCut \\\"$SMPROGRAMS\\\\LiveOps Sentinel\\\\LiveOps Sentinel.lnk\\\" \\\"$INSTDIR\\\\liveops_sentinel.exe\\\"
+        CreateShortCut \\\"$SMPROGRAMS\\\\LiveOps Sentinel\\\\Uninstall.lnk\\\" \\\"$INSTDIR\\\\uninstall.exe\\\"
+        CreateShortCut \\\"$DESKTOP\\\\LiveOps Sentinel.lnk\\\" \\\"$INSTDIR\\\\liveops_sentinel.exe\\\"
+    ")
+    
+    set(CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS "
+        Delete \\\"$SMPROGRAMS\\\\LiveOps Sentinel\\\\LiveOps Sentinel.lnk\\\"
+        Delete \\\"$SMPROGRAMS\\\\LiveOps Sentinel\\\\Uninstall.lnk\\\"
+        Delete \\\"$DESKTOP\\\\LiveOps Sentinel.lnk\\\"
+        RMDir \\\"$SMPROGRAMS\\\\LiveOps Sentinel\\\"
+    ")
 endif()

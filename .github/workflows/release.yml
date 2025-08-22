@@ -90,10 +90,14 @@ jobs:
           Write-Warning "Code signing failed: $($_.Exception.Message)"
         }
     
-    - name: Create package
+    - name: Create packages
       run: |
-        cpack --config build/CPackConfig.cmake
-    
+        # Create ZIP package
+        cpack --config build/CPackConfig.cmake -G ZIP
+        
+        # Create NSIS installer
+        cpack --config build/CPackConfig.cmake -G NSIS
+
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
@@ -102,8 +106,9 @@ jobs:
           dist/
           *.zip
           *.exe
+          *.msi
         retention-days: 30
-    
+
     - name: Get version
       id: meta
       run: |
@@ -112,14 +117,14 @@ jobs:
           $version = "${{ github.event.inputs.version || '0.2.0' }}"
         }
         echo "version=$version" >> $env:GITHUB_OUTPUT
-    
+
     - name: Create Release
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v1
       with:
         files: |
           LiveOpsSentinel-${{ steps.meta.outputs.version }}-win-x64.zip
-          dist/liveops_sentinel.exe
+          LiveOpsSentinel-${{ steps.meta.outputs.version }}-win-x64.exe
         draft: false
         prerelease: false
         generate_release_notes: true

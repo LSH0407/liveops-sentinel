@@ -24,13 +24,26 @@ UE/OBS 라이브 송출 품질을 모니터링하는 C++ 데스크톱 애플리�
 ## 📥 다운로드
 
 ### 최신 릴리스
+- **Windows 인스톨러**: [LiveOps Sentinel v0.2.0](https://github.com/LSH0407/liveops-sentinel/releases/latest) (추천)
 - **Windows ZIP**: [LiveOps Sentinel v0.2.0](https://github.com/LSH0407/liveops-sentinel/releases/latest)
 - **Linux TGZ**: [LiveOps Sentinel v0.2.0](https://github.com/LSH0407/liveops-sentinel/releases/latest)
 
 ### 실행 방법
-1. 다운로드한 ZIP 파일을 원하는 폴더에 압축 해제
-2. `liveops_sentinel.exe` (Windows) 또는 `liveops_sentinel` (Linux) 실행
-3. **첫 실행 시 Discord Webhook 설정 마법사가 자동으로 표시됩니다**
+
+**Windows 인스톨러 (추천):**
+1. `LiveOpsSentinel-0.2.0-win-x64.exe` 다운로드
+2. 인스톨러 실행 및 설치
+3. 시작 메뉴 또는 바탕화면에서 "LiveOps Sentinel" 실행
+
+**Windows ZIP:**
+1. ZIP 파일을 원하는 폴더에 압축 해제
+2. `liveops_sentinel.exe` 실행
+
+**Linux:**
+1. TGZ 파일을 원하는 폴더에 압축 해제
+2. `liveops_sentinel` 실행
+
+**첫 실행 시 Discord Webhook 설정 마법사가 자동으로 표시됩니다**
 
 ### 시스템 요구사항
 - **Windows**: Windows 10/11 (x64)
