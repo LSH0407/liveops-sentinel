@@ -45,7 +45,7 @@ jobs:
     
     - name: Install vcpkg dependencies
       run: |
-        ${{ env.VCPKG_ROOT }}/vcpkg install sdl2 imgui asio nlohmann-json spdlog --recurse
+        ${{ env.VCPKG_ROOT }}/vcpkg install sdl2 imgui asio nlohmann-json spdlog --recurse --debug
         ${{ env.VCPKG_ROOT }}/vcpkg integrate install
     
     - name: Setup Python
@@ -131,7 +131,7 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libgl1-mesa-dev libglu1-mesa-dev libasound2-dev autoconf automake libtool pkg-config build-essential cmake git libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxi-dev libxcursor-dev libxss-dev
+        sudo apt-get install -y libgl1-mesa-dev libglu1-mesa-dev libasound2-dev autoconf automake libtool pkg-config build-essential cmake git libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxi-dev libxcursor-dev libxss-dev libudev-dev libdbus-1-dev libibus-1.0-dev libxkbcommon-dev
     
     - name: Setup vcpkg
       uses: lukka/run-vcpkg@v11
@@ -141,7 +141,7 @@ jobs:
     
     - name: Install vcpkg dependencies
       run: |
-        ${{ env.VCPKG_ROOT }}/vcpkg install sdl2 imgui asio nlohmann-json spdlog --recurse
+        ${{ env.VCPKG_ROOT }}/vcpkg install sdl2 imgui asio nlohmann-json spdlog --recurse --debug
         ${{ env.VCPKG_ROOT }}/vcpkg integrate install
     
     - name: Setup Python
