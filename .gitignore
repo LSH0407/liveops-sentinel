@@ -153,3 +153,8 @@ logs/
 *.msi
 *.deb
 *.rpm
+
+# Deployment scripts (internal use only)
+deploy.bat
+deploy.ps1
+build_local.bat

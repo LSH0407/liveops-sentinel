@@ -62,26 +62,6 @@ UE/OBS 라이브 송출 품질을 모니터링하는 C++ 데스크톱 애플리�
 
 ## 🚀 빌드 및 실행
 
-### 빠른 배포 (자동화 스크립트)
-
-**Windows 배치 파일:**
-```cmd
-# 전체 배포 (Git 커밋 + 푸시 + 태그 + GitHub Actions)
-deploy.bat
-
-# 로컬 빌드만
-build_local.bat
-```
-
-**PowerShell 스크립트:**
-```powershell
-# 전체 배포
-.\deploy.ps1
-
-# 로컬 빌드
-.\scripts\build_release_win.ps1
-```
-
 ### 1. 의존성 설치
 
 ```bash
