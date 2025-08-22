@@ -10,12 +10,12 @@
 #include "../diag/Recommendation.h"
 #include "../ui/Checklist.h"
 #include "../ui/WebhookWizard.h"
-#include <imgui.h>
 #include <spdlog/spdlog.h>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <sstream>
+#include <iostream>
 
 Dashboard::Dashboard(){
   probe_ = std::make_unique<Probe>();

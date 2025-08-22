@@ -1,34 +1,13 @@
 #include "ObsClient.h"
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
-#include <websocketpp/config/asio_client.hpp>
-#include <websocketpp/client.hpp>
+#include <iostream>
 
 using json = nlohmann::json;
 
 ObsClient::ObsClient() {
-    client_ = std::make_unique<WebSocketClient>();
-    
-    client_->set_access_channels(websocketpp::log::alevel::none);
-    client_->set_error_channels(websocketpp::log::elevel::fatal);
-    
-    client_->init_asio();
-    
-    client_->set_open_handler([this](websocketpp::connection_hdl hdl) {
-        onOpen(hdl);
-    });
-    
-    client_->set_close_handler([this](websocketpp::connection_hdl hdl) {
-        onClose(hdl);
-    });
-    
-    client_->set_message_handler([this](websocketpp::connection_hdl hdl, WebSocketClient::message_ptr msg) {
-        onMessage(hdl, msg);
-    });
-    
-    client_->set_fail_handler([this](websocketpp::connection_hdl hdl) {
-        onError(hdl);
-    });
+    // OBS WebSocket functionality disabled - console stub
+    spdlog::info("OBS Client initialized (WebSocket disabled)");
 }
 
 ObsClient::~ObsClient() {
@@ -36,54 +15,14 @@ ObsClient::~ObsClient() {
 }
 
 bool ObsClient::connect(const std::string& host, int port, const std::string& password) {
-    if (connected_) {
-        disconnect();
-    }
-    
-    host_ = host;
-    port_ = port;
-    password_ = password;
-    
-    std::string uri = "ws://" + host + ":" + std::to_string(port);
-    
-    try {
-        WebSocketConnection con = client_->get_connection(uri, nullptr);
-        connection_ = con->get_handle();
-        client_->connect(con);
-        
-        // 별도 스레드에서 WebSocket 이벤트 루프 실행
-        std::thread([this]() {
-            try {
-                client_->run();
-            } catch (const std::exception& e) {
-                spdlog::error("OBS WebSocket error: {}", e.what());
-            }
-        }).detach();
-        
-        return true;
-    } catch (const std::exception& e) {
-        spdlog::error("Failed to connect to OBS: {}", e.what());
-        return false;
-    }
+    // OBS WebSocket functionality disabled - console stub
+    spdlog::info("OBS WebSocket connection disabled (console mode)");
+    return false;
 }
 
 void ObsClient::disconnect() {
-    if (connected_) {
-        try {
-            client_->close(connection_, websocketpp::close::status::normal, "Disconnecting");
-        } catch (const std::exception& e) {
-            spdlog::error("Error disconnecting from OBS: {}", e.what());
-        }
-        connected_ = false;
-    }
-    
-    // 통계 수집 스레드 정리
-    if (stats_running_) {
-        stats_running_ = false;
-        if (stats_thread_.joinable()) {
-            stats_thread_.join();
-        }
-    }
+    // OBS WebSocket functionality disabled - console stub
+    spdlog::info("OBS WebSocket disconnect (console mode)");
 }
 
 bool ObsClient::isConnected() const {

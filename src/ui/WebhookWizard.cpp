@@ -1,12 +1,11 @@
 #include "WebhookWizard.h"
 #include "../core/Config.h"
-#include "imgui.h"
-#include "imgui_internal.h"
 #include <regex>
 #include <sstream>
 #include <iomanip>
 #include <chrono>
 #include <thread>
+#include <iostream>
 
 #ifdef _WIN32
 #include <winsock2.h>
