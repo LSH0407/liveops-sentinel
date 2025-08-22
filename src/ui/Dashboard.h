@@ -92,11 +92,11 @@ private:
   
   // 벤치마크 상태
   bool benchmarkRunning_{false};
-  BenchResult lastBenchResult_;
-  std::vector<BenchResult> benchHistory_;
+  // BenchResult lastBenchResult_; // Console mode - disabled
+  // std::vector<BenchResult> benchHistory_; // Console mode - disabled
   
   // 추천 상태
-  ObsRecommendation currentRecommendation_;
+  // ObsRecommendation currentRecommendation_; // Console mode - disabled
   bool showRecommendation_{false};
   
   // 진단 모드
