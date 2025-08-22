@@ -212,83 +212,8 @@ void Checklist::updateCheckItem(const std::string& name, CheckStatus status, con
 }
 
 void Checklist::draw() {
-    ImGui::Begin("Pre-flight Checklist");
-    
-    if (running_) {
-        ImGui::TextColored(ImVec4(1, 1, 0, 1), "진행 중... (%zu/%zu)", currentCheck_, totalChecks_);
-        
-        // Progress bar
-        float progress = static_cast<float>(currentCheck_) / static_cast<float>(totalChecks_);
-        ImGui::ProgressBar(progress, ImVec2(-1, 20));
-        
-        ImGui::Spacing();
-    } else {
-        if (ImGui::Button("Run Pre-flight", ImVec2(-1, 30))) {
-            runPreflight();
-        }
-        
-        ImGui::Spacing();
-        
-        // Show last result summary
-        if (!lastResult_.summary.empty()) {
-            ImGui::TextWrapped("%s", lastResult_.summary.c_str());
-            ImGui::Spacing();
-        }
-    }
-    
-    // Display check items
-    for (const auto& check : lastResult_.checks) {
-        ImVec4 color;
-        const char* icon;
-        
-        switch (check.status) {
-            case CheckStatus::PASSED:
-                color = ImVec4(0, 1, 0, 1);
-                icon = "✅";
-                break;
-            case CheckStatus::FAILED:
-                color = ImVec4(1, 0, 0, 1);
-                icon = "❌";
-                break;
-            case CheckStatus::WARNING:
-                color = ImVec4(1, 1, 0, 1);
-                icon = "⚠️";
-                break;
-            default:
-                color = ImVec4(0.7f, 0.7f, 0.7f, 1);
-                icon = "⏳";
-                break;
-        }
-        
-        ImGui::TextColored(color, "%s %s", icon, check.name.c_str());
-        if (ImGui::IsItemHovered() && !check.description.empty()) {
-            ImGui::SetTooltip("%s", check.description.c_str());
-        }
-        
-        if (!check.message.empty()) {
-            ImGui::SameLine();
-            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1), "- %s", check.message.c_str());
-        }
-    }
-    
-    ImGui::Spacing();
-    
-    // Action buttons
-    if (!running_ && !lastResult_.summary.empty()) {
-        if (ImGui::Button("Copy Result", ImVec2(120, 25))) {
-            copyResultToClipboard();
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Save JSON", ImVec2(120, 25))) {
-            auto now = std::chrono::system_clock::now();
-            auto time_t = std::chrono::system_clock::to_time_t(now);
-            std::stringstream ss;
-            ss << "reports/preflight_" << std::put_time(std::localtime(&time_t), "%Y%m%d_%H%M") << ".json";
-            saveResultToFile(ss.str());
-        }
-    }
-    
-    ImGui::End();
+    // Console mode - GUI disabled
+    std::cout << "Pre-flight Checklist: Console mode" << std::endl;
 }
 
 std::string Checklist::getStatusText() const {

@@ -4,12 +4,10 @@
 #include <chrono>
 #include <string>
 #include <memory>
+#include <thread>
+#include <atomic>
 
-struct ProbeSample {
-  double rtt_ms{0};
-  double loss_pct{0};
-  std::chrono::steady_clock::time_point t;
-};
+// ProbeSample is defined in Probe.h
 
 struct DiagnosticData {
   std::chrono::steady_clock::time_point timestamp;

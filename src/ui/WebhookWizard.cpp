@@ -58,107 +58,18 @@ void WebhookWizard::setOnWebhookSaved(std::function<void(const std::string&)> ca
 }
 
 void WebhookWizard::drawModal() {
-    if (!isVisible_) return;
-
-    // Set modal flags (non-closable)
-    ImGui::SetNextWindowSize(ImVec2(500, 300), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
-    
-    ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | 
-                            ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_Modal;
-    
-    if (ImGui::Begin("Discord Webhook 설정", &isVisible_, flags)) {
-        ImGui::TextWrapped("LiveOps Sentinel이 Discord로 알림을 보내기 위해 웹훅 URL이 필요합니다.");
-        ImGui::Spacing();
-        
-        drawInputField();
-        ImGui::Spacing();
-        drawButtons();
-        
-        // Show test result if available
-        if (!lastTestResult_.message.empty()) {
-            ImGui::Spacing();
-            ImGui::Separator();
-            
-            const char* icon = lastTestResult_.success ? "✅" : "❌";
-            ImGui::TextColored(
-                lastTestResult_.success ? ImVec4(0.0f, 1.0f, 0.0f, 1.0f) : ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
-                "%s %s", icon, lastTestResult_.message.c_str()
-            );
-            
-            if (!lastTestResult_.success && lastTestResult_.statusCode > 0) {
-                ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), 
-                    "HTTP 상태 코드: %d", lastTestResult_.statusCode);
-            }
-        }
-    }
-    ImGui::End();
+    // Console mode - GUI disabled
+    std::cout << "Webhook Wizard Modal: Console mode" << std::endl;
 }
 
 void WebhookWizard::drawInputField() {
-    ImGui::Text("Discord Webhook URL:");
-    
-    // Input field with show/hide toggle
-    ImGui::PushItemWidth(-1);
-    
-    std::string displayText = showPassword_ ? webhookUrl_ : maskedUrl_;
-    char buffer[512];
-    strncpy(buffer, displayText.c_str(), sizeof(buffer) - 1);
-    buffer[sizeof(buffer) - 1] = '\0';
-    
-    if (ImGui::InputText("##webhook_url", buffer, sizeof(buffer), 
-                        ImGuiInputTextFlags_EnterReturnsTrue)) {
-        webhookUrl_ = sanitizeUrl(buffer);
-        maskedUrl_ = MaskWebhook(webhookUrl_);
-        isValidUrl_ = validateWebhookUrl(webhookUrl_);
-    }
-    
-    ImGui::PopItemWidth();
-    
-    // Show/Hide toggle button
-    ImGui::SameLine();
-    if (ImGui::Button(showPassword_ ? "숨기기" : "보이기")) {
-        showPassword_ = !showPassword_;
-    }
-    
-    // URL validation indicator
-    if (!webhookUrl_.empty()) {
-        ImGui::SameLine();
-        const char* icon = isValidUrl_ ? "✅" : "❌";
-        ImGui::TextColored(
-            isValidUrl_ ? ImVec4(0.0f, 1.0f, 0.0f, 1.0f) : ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
-            "%s", icon
-        );
-    }
-    
-    // Help text
-    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), 
-        "예시: https://discord.com/api/webhooks/123456789/abcdef...");
+    // Console mode - GUI disabled
+    std::cout << "Webhook Input Field: Console mode" << std::endl;
 }
 
 void WebhookWizard::drawButtons() {
-    ImGui::BeginGroup();
-    
-    // Test Webhook button
-    if (ImGui::Button("웹훅 테스트", ImVec2(120, 0))) {
-        testWebhook();
-    }
-    ImGui::SameLine();
-    
-    // Save button (only enabled if URL is valid)
-    ImGui::BeginDisabled(!isValidUrl_);
-    if (ImGui::Button("저장", ImVec2(120, 0))) {
-        saveWebhook();
-    }
-    ImGui::EndDisabled();
-    
-    ImGui::EndGroup();
-    
-    // Show testing indicator
-    if (isTesting_) {
-        ImGui::SameLine();
-        ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "테스트 중...");
-    }
+    // Console mode - GUI disabled
+    std::cout << "Webhook Buttons: Console mode" << std::endl;
 }
 
 void WebhookWizard::testWebhook() {

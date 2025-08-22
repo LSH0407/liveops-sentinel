@@ -58,7 +58,7 @@ Dashboard::Dashboard(){
   // Probe 시작
   probe_->start(targetHost_, targetPort_, sendRateHz_, [this](double rtt, double loss){
     std::scoped_lock lk(mtx_);
-    samples_.push_back({rtt, loss, std::chrono::steady_clock::now()});
+    samples_.push_back(ProbeSample(rtt, loss));
     if (samples_.size() > 600) samples_.erase(samples_.begin());
     
     rttMetrics_->addSample(rtt);
@@ -291,7 +291,7 @@ void Dashboard::startDiagnosticMode() {
   probe_->stop();
   probe_->start(targetHost_, targetPort_, 60, [this](double rtt, double loss){
     std::scoped_lock lk(mtx_);
-    samples_.push_back({rtt, loss, std::chrono::steady_clock::now()});
+    samples_.push_back(ProbeSample(rtt, loss));
     if (samples_.size() > 600) samples_.erase(samples_.begin());
     
     rttMetrics_->addSample(rtt);
@@ -352,7 +352,7 @@ void Dashboard::stopDiagnosticMode() {
   probe_->stop();
   probe_->start(targetHost_, targetPort_, originalProbeRate_, [this](double rtt, double loss){
     std::scoped_lock lk(mtx_);
-    samples_.push_back({rtt, loss, std::chrono::steady_clock::now()});
+    samples_.push_back(ProbeSample(rtt, loss));
     if (samples_.size() > 600) samples_.erase(samples_.begin());
     
     rttMetrics_->addSample(rtt);
