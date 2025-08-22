@@ -2,11 +2,9 @@
 #include <string>
 #include <functional>
 #include <memory>
-#include <websocketpp/config/asio_client.hpp>
-#include <websocketpp/client.hpp>
 
-using WebSocketClient = websocketpp::client<websocketpp::config::asio_tls_client>;
-using WebSocketConnection = WebSocketClient::connection_ptr;
+// OBS WebSocket functionality disabled due to websocketpp removal from vcpkg
+// This is a stub implementation for console application
 
 struct ObsStatus {
     bool connected{false};
@@ -67,18 +65,12 @@ public:
     void setEventCallback(std::function<void(const std::string&, const std::string&)> cb);
     
 private:
-    void onOpen(websocketpp::connection_hdl hdl);
-    void onClose(websocketpp::connection_hdl hdl);
-    void onMessage(websocketpp::connection_hdl hdl, WebSocketClient::message_ptr msg);
-    void onError(websocketpp::connection_hdl hdl);
-    
+    // OBS WebSocket functionality disabled - stub methods
     void sendRequest(const std::string& requestType, const std::string& data = "{}");
     void handleResponse(const std::string& response);
     void updateStatus();
     void requestStats();
     
-    std::unique_ptr<WebSocketClient> client_;
-    websocketpp::connection_hdl connection_;
     std::string host_;
     int port_;
     std::string password_;
@@ -88,11 +80,6 @@ private:
     
     // OBS WebSocket API 요청 ID
     int requestId_{1};
-    
-    // 주기적 통계 수집
-    std::thread stats_thread_;
-    std::atomic<bool> stats_running_{false};
-    std::chrono::steady_clock::time_point last_stats_request_;
     
     // Event handling
     std::function<void(const std::string&, const std::string&)> eventCallback_;

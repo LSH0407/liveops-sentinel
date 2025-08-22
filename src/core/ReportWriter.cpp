@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <iomanip>
 #include <sstream>
+#include <regex>
 
 #ifdef _WIN32
 #include <windows.h>
