@@ -1,0 +1,6 @@
+{
+  "probeHost": "127.0.0.1",
+  "probePort": 50051,
+  "probeRateHz": 20,
+  "discordWebhook": ""
+}
