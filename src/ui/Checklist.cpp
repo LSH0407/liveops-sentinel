@@ -1,3 +1,7 @@
+#ifdef DISABLE_GUI
+// 콘솔 모드: 빌드 제외
+static int _dummyChecklistForConsole = 0;
+#else
 #include "Checklist.h"
 #include "../obs/ObsClient.h"
 #include "../sys/ProcessMon.h"
@@ -399,3 +403,4 @@ std::string Checklist::getObsRecordingPath() const {
 }
 
 } // namespace ui
+#endif // DISABLE_GUI

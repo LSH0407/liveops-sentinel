@@ -68,7 +68,7 @@ bool Probe::startLocalEcho(int port){
   stopLocalEcho(); echoRun_ = true;
   echoTh_ = std::thread([=]{
     asio::io_context io;
-    udp::socket sock(io, udp::endpoint(udp::v4(), port));
+    udp::socket sock(io, udp::endpoint(udp::v4(), static_cast<asio::ip::port_type>(port)));
     std::vector<char> buf(1024);
     while(echoRun_){
       udp::endpoint from; asio::error_code ec;

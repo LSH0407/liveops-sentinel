@@ -45,7 +45,7 @@ jobs:
     
     - name: Install vcpkg dependencies
       run: |
-        ${{ env.VCPKG_ROOT }}/vcpkg install asio nlohmann-json spdlog --recurse --debug
+        ${{ env.VCPKG_ROOT }}/vcpkg install asio nlohmann-json spdlog sdl2 imgui --recurse --debug
         ${{ env.VCPKG_ROOT }}/vcpkg integrate install
     
     - name: Setup Python
@@ -131,7 +131,7 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y autoconf automake libtool pkg-config build-essential cmake git
+        sudo apt-get install -y autoconf automake libtool pkg-config build-essential cmake git libsdl2-dev
     
     - name: Setup vcpkg
       uses: lukka/run-vcpkg@v11
@@ -141,7 +141,7 @@ jobs:
     
     - name: Install vcpkg dependencies
       run: |
-        ${{ env.VCPKG_ROOT }}/vcpkg install asio nlohmann-json spdlog --recurse --debug
+        ${{ env.VCPKG_ROOT }}/vcpkg install asio nlohmann-json spdlog imgui --recurse --debug
         ${{ env.VCPKG_ROOT }}/vcpkg integrate install
     
     - name: Setup Python

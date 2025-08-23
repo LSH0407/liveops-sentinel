@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <random>
+#include <numeric>
 
 BandwidthBench::BandwidthBench() {
     io_context_ = std::make_unique<asio::io_context>();

@@ -17,11 +17,10 @@ enum class BenchMode {
     CLIENT
 };
 
-struct SystemMetrics {
-    double cpuPct{0.0};
-    double gpuPct{0.0};
+#include "../core/SystemMetrics.h"
+
+struct BenchSystemMetrics : public SystemMetrics {
     double memPct{0.0};
-    double diskWriteMBps{0.0};
     std::chrono::steady_clock::time_point timestamp;
 };
 
@@ -38,7 +37,7 @@ struct BenchResult {
     std::chrono::steady_clock::time_point timestamp;
     
     // 시스템 지표 추가
-    SystemMetrics systemMetrics;
+    BenchSystemMetrics systemMetrics;
 };
 
 struct BenchConfig {
@@ -67,7 +66,7 @@ public:
     BenchResult getServerStats() const;
     
     // 시스템 지표 수집
-    SystemMetrics getCurrentSystemMetrics() const;
+    BenchSystemMetrics getCurrentSystemMetrics() const;
     
 private:
     void runServer();
@@ -79,7 +78,7 @@ private:
     void runSystemMetricsCollector();
     
     void updateStats(const BenchResult& result);
-    SystemMetrics collectSystemMetrics();
+    BenchSystemMetrics collectSystemMetrics();
     
     std::unique_ptr<asio::io_context> io_context_;
     std::unique_ptr<asio::ip::tcp::acceptor> tcp_acceptor_;
@@ -103,5 +102,5 @@ private:
     
     // 시스템 지표
     mutable std::mutex system_metrics_mutex_;
-    SystemMetrics current_system_metrics_;
+    BenchSystemMetrics current_system_metrics_;
 };
