@@ -10,9 +10,10 @@ option(ENABLE_GUI "Build with ImGui GUI" OFF)
 option(ENABLE_OBS "Enable OBS WebSocket integration" OFF)
 
 if(ENABLE_GUI)
-  add_compile_definitions(ENABLE_GUI)
+  add_compile_definitions(ENABLE_GUI IMGUI_IMPL_OPENGL_LOADER_GLAD ASIO_STANDALONE)
+else()
+  add_compile_definitions(ASIO_STANDALONE)
 endif()
-add_compile_definitions(ASIO_STANDALONE)
 
 # 컴파일러 경고 설정 (경고는 오류 아님)
 if(MSVC)
@@ -69,7 +70,6 @@ if(ENABLE_GUI)
   find_package(glad CONFIG REQUIRED)
   find_package(glfw3 CONFIG REQUIRED)
   find_package(imgui CONFIG REQUIRED)
-  add_compile_definitions(IMGUI_IMPL_OPENGL_LOADER_GLAD)
 endif()
 
 if(ENABLE_OBS)
@@ -88,11 +88,7 @@ target_include_directories(liveops_sentinel PRIVATE src)
 # target_link_libraries(liveops_sentinel PRIVATE asio nlohmann_json spdlog)
 
 if(ENABLE_GUI)
-  target_link_libraries(liveops_sentinel PRIVATE
-    glad::glad
-    glfw
-    imgui::imgui
-  )
+  target_link_libraries(liveops_sentinel PRIVATE glad::glad glfw imgui::imgui)
 endif()
 
 if(WIN32)

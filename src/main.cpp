@@ -1,5 +1,3 @@
-#include "app/App.h"
-#include <spdlog/spdlog.h>
 #include <iostream>
 namespace ui { int RunApp(); }
 int run_console(); // 있으면 호출

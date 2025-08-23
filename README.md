@@ -78,19 +78,25 @@ scripts\run_latest_console.cmd   # 항상 out\liveops_sentinel.exe 실행
 ## GUI Mode (선택사항)
 
 GUI 모드를 사용하려면 추가 패키지가 필요합니다:
-- SDL2
-- ImGui
+- ImGui + GLFW + OpenGL3 (vcpkg: imgui[glfw-binding,opengl3-binding], glfw3, glad)
 
 ```powershell
+# GUI 의존성 설치
+vcpkg install glad glfw3 imgui[glfw-binding,opengl3-binding]
+
 # GUI 모드 빌드
-cmake -B build -S . -G "Visual Studio 17 2022" -A x64 `
-  -DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake `
-  -DDISABLE_GUI=OFF -DENABLE_OBS=OFF -DCMAKE_BUILD_TYPE=Release
+set VCPKG_ROOT=C:\vcpkg
+cmake -S . -B build_gui -G "Visual Studio 17 2022" -A x64 ^
+  -DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake ^
+  -DENABLE_GUI=ON -DENABLE_OBS=OFF
+cmake --build build_gui --config Release --parallel
+.\build_gui\Release\liveops_sentinel.exe
 ```
 
 ## 빌드 옵션
 
-- `DISABLE_GUI=ON` (기본값): GUI 없이 콘솔 모드로 빌드
+- `ENABLE_GUI=OFF` (기본값): GUI 없이 콘솔 모드로 빌드
+- `ENABLE_GUI=ON`: ImGui + GLFW + OpenGL3 GUI 모드로 빌드
 - `ENABLE_OBS=OFF` (기본값): OBS WebSocket 기능 비활성화, 콘솔 스텁 사용
 - `CMAKE_BUILD_TYPE=Release`: Release 모드 빌드
 

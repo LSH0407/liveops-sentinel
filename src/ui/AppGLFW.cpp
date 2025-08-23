@@ -20,7 +20,6 @@ struct Ring {
 }
 
 namespace ui {
-
 int RunApp() {
   if (!glfwInit()) return 1;
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -30,7 +29,6 @@ int RunApp() {
   if (!win) { glfwTerminate(); return 2; }
   glfwMakeContextCurrent(win);
   glfwSwapInterval(1);
-
   if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) { glfwDestroyWindow(win); glfwTerminate(); return 3; }
 
   IMGUI_CHECKVERSION();
@@ -46,8 +44,6 @@ int RunApp() {
 
   while (!glfwWindowShouldClose(win)) {
     glfwPollEvents();
-
-    // demo metrics (후에 Probe/OBS로 교체)
     auto now = std::chrono::steady_clock::now();
     float sec = std::chrono::duration<float>(now - t0).count();
     float baseRtt  = 40.f + 20.f * std::sin(sec * 1.2f) + jitter(rng);
@@ -84,5 +80,4 @@ int RunApp() {
   glfwTerminate();
   return 0;
 }
-
 } // namespace ui
