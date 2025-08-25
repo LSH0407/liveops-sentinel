@@ -1,14 +1,33 @@
-# Build directories
-build/
-out/
-Debug/
-Release/
+# CMake / VS
+build*/
+out*/
+.vs/
 x64/
-x86/
-CMakeFiles/
+ipch/
 CMakeCache.txt
-cmake_install.cmake
-Makefile
+CMakeFiles/
+Testing/
+*_autogen/
+*.vcxproj.user
+
+# vcpkg local artifacts
+vcpkg_installed/
+vcpkg_downloads/
+packages/
+buildtrees/
+
+# Binaries
+*.exe
+*.dll
+*.lib
+*.pdb
+*.ilk
+*.obj
+*.log
+
+# Tools cache
+.vscode/
+.tools/
 
 # IDE files
 .vs/
@@ -164,3 +183,13 @@ fix_workflow_final.bat
 fix_vcpkg_final.bat
 fix_cmake_final.bat
 create_release_now.bat
+
+# build outputs
+/build/
+/build_*/
+/ui_py/build/
+/ui_py/dist/
+/ui_py/*.spec
+/ui_py/__pycache__/
+/ui_py/.venv/
+/release/

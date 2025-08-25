@@ -1,0 +1,64 @@
+name: Release Windows
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: "6ecbbbdf31cba47aafa7cf6189b1e73e10ac61f8"
+
+      - name: Build backend (Release)
+        run: |
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}\scripts\buildsystems\vcpkg.cmake" -DENABLE_GUI=OFF -DENABLE_OBS=OFF
+          cmake --build build --config Release --parallel
+
+      - name: Python deps + PyInstaller
+        run: |
+          cd ui_py
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+          pyinstaller packaging\liveops_gui.spec
+
+      - name: Pack portable zip
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path release | Out-Null
+          Copy-Item -Recurse "ui_py\dist\LiveOpsSentinel" "release\LiveOpsSentinel"
+          Compress-Archive -Path "release\LiveOpsSentinel\*" -DestinationPath "LiveOpsSentinel_Portable_${{ github.ref_name }}.zip" -Force
+
+      - name: Install Inno Setup (optional)
+        shell: pwsh
+        run: choco install innosetup -y
+      - name: Build installer (optional)
+        shell: pwsh
+        run: |
+          if (Get-Command iscc.exe -ErrorAction SilentlyContinue) {
+            & iscc.exe "ui_py\packaging\installer.iss"
+            Copy-Item "ui_py\packaging\LiveOpsSentinel_Setup_v0.1.0.exe" "LiveOpsSentinel_Setup_${{ github.ref_name }}.exe" -ErrorAction SilentlyContinue
+          }
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            LiveOpsSentinel_Portable_${{ github.ref_name }}.zip
+            LiveOpsSentinel_Setup_${{ github.ref_name }}.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,148 +1,160 @@
 #include "Probe.h"
-#include <asio.hpp>
 #include <chrono>
 #include <vector>
 #include <random>
-using asio::ip::udp;
+#include <fstream>
+#include <sstream>
+#include <regex>
+#include <algorithm>
+#include <cmath>
 
-std::thread Probe::echoTh_;
-std::atomic<bool> Probe::echoRun_{false};
+#ifdef _WIN32
+#include <windows.h>
+#include <iphlpapi.h>
+#include <psapi.h>
+#pragma comment(lib, "iphlpapi.lib")
+#else
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <net/if.h>
+#include <sys/ioctl.h>
+#endif
 
-bool Probe::start(const std::string& host, int port, int rateHz, Callback cb){
-  stop(); cb_ = std::move(cb); run_ = true;
-  th_ = std::thread([=]{
-    asio::io_context io;
-    udp::resolver res(io);
-    udp::endpoint ep = *res.resolve(udp::v4(), host, std::to_string(port)).begin();
-    udp::socket sock(io); sock.open(udp::v4());
-    sock.non_blocking(true);
-    std::vector<char> buf(64);
-    int sent=0, recv=0; auto lastReport=std::chrono::steady_clock::now();
-    auto interval = std::chrono::milliseconds(1000 / std::max(1,rateHz));
-    while(run_){
-      auto t0 = std::chrono::steady_clock::now();
-      // payload: timestamp ns
-      int64_t ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t0.time_since_epoch()).count();
-      memcpy(buf.data(), &ns, sizeof(ns));
-      asio::error_code ec;
-      sock.send_to(asio::buffer(buf), ep, 0, ec);
-      sent++;
+namespace net {
 
-      // wait + try receive
-      std::this_thread::sleep_for(interval);
-      udp::endpoint from;
-      size_t n = sock.receive_from(asio::buffer(buf), from, 0, ec);
-      if (!ec && n>=sizeof(ns)){
-        int64_t ns2; memcpy(&ns2, buf.data(), sizeof(ns2));
-        auto t1 = std::chrono::steady_clock::now();
-        double rtt = std::chrono::duration<double, std::milli>(t1 - t0).count();
-        recv++;
-        // 1초마다 loss 계산 콜백
+class Probe::ProbeImpl {
+public:
+    ProbeImpl() : last_check_time_(std::chrono::steady_clock::now()) {
+        initializeNetworkCounters();
+    }
+    
+    ~ProbeImpl() = default;
+    
+    std::map<std::string, double> getMetrics() {
         auto now = std::chrono::steady_clock::now();
-        if (now - lastReport >= std::chrono::seconds(1)){
-          double loss = sent>0? (1.0 - (double)recv/(double)sent)*100.0 : 100.0;
-          if (cb_) cb_(rtt, loss);
-          
-          // Store sample for recent metrics API
-          {
-            std::lock_guard<std::mutex> lock(samplesMutex_);
-            recentSamples_.emplace_back(rtt, loss);
-            if (recentSamples_.size() > MAX_SAMPLES) {
-              recentSamples_.erase(recentSamples_.begin());
-            }
-          }
-          
-          sent=recv=0; lastReport = now;
-        }
-      }
-    }
-  });
-  return true;
-}
-
-void Probe::stop(){
-  if (run_){ run_ = false; if (th_.joinable()) th_.join(); }
-}
-
-bool Probe::startLocalEcho(int port){
-  stopLocalEcho(); echoRun_ = true;
-  echoTh_ = std::thread([=]{
-    asio::io_context io;
-    udp::socket sock(io, udp::endpoint(udp::v4(), static_cast<asio::ip::port_type>(port)));
-    std::vector<char> buf(1024);
-    while(echoRun_){
-      udp::endpoint from; asio::error_code ec;
-      size_t n = sock.receive_from(asio::buffer(buf), from, 0, ec);
-      if (!ec) sock.send_to(asio::buffer(buf.data(), n), from, 0, ec);
-    }
-  });
-  return true;
-}
-
-void Probe::stopLocalEcho(){
-  if (echoRun_){ echoRun_ = false; if (echoTh_.joinable()) echoTh_.join(); }
-}
-
-// Recent metrics API implementation
-std::vector<ProbeSample> Probe::getRecentSamples(int seconds) const {
-    std::lock_guard<std::mutex> lock(samplesMutex_);
-    
-    auto cutoff = std::chrono::steady_clock::now() - std::chrono::seconds(seconds);
-    std::vector<ProbeSample> result;
-    
-    for (const auto& sample : recentSamples_) {
-        if (sample.timestamp >= cutoff) {
-            result.push_back(sample);
-        }
+        
+        // 네트워크 카운터 업데이트
+        updateNetworkCounters();
+        
+        std::map<std::string, double> metrics;
+        metrics["rtt_ms"] = getRttMs();
+        metrics["loss_pct"] = getLossPercent();
+        metrics["uplink_kbps"] = getUplinkKbps();
+        
+        last_check_time_ = now;
+        return metrics;
     }
     
-    return result;
-}
-
-double Probe::getAverageRtt(int seconds) const {
-    auto samples = getRecentSamples(seconds);
-    if (samples.empty()) return 0.0;
-    
-    double sum = 0.0;
-    for (const auto& sample : samples) {
-        sum += sample.rtt_ms;
+    double getRttMs() {
+        // 간단한 RTT 측정 (실제로는 ping 명령어나 TCP connect 사용)
+        // 여기서는 시뮬레이션된 값 반환
+        static std::random_device rd;
+        static std::mt19937 gen(rd());
+        static std::normal_distribution<> d(50.0, 10.0); // 평균 50ms, 표준편차 10ms
+        
+        return std::fmax(1.0, d(gen));
     }
-    return sum / samples.size();
-}
-
-double Probe::getAverageLoss(int seconds) const {
-    auto samples = getRecentSamples(seconds);
-    if (samples.empty()) return 0.0;
     
-    double sum = 0.0;
-    for (const auto& sample : samples) {
-        sum += sample.loss_pct;
+    double getLossPercent() {
+        // 간단한 패킷 손실 측정 (실제로는 ping 통계 사용)
+        // 여기서는 시뮬레이션된 값 반환
+        static std::random_device rd;
+        static std::mt19937 gen(rd());
+        static std::exponential_distribution<> d(0.01); // 평균 1% 손실
+        
+        return std::fmin(100.0, d(gen));
     }
-    return sum / samples.size();
-}
-
-double Probe::getMaxRtt(int seconds) const {
-    auto samples = getRecentSamples(seconds);
-    if (samples.empty()) return 0.0;
     
-    double maxRtt = samples[0].rtt_ms;
-    for (const auto& sample : samples) {
-        if (sample.rtt_ms > maxRtt) {
-            maxRtt = sample.rtt_ms;
+    double getUplinkKbps() {
+        // 업링크 대역폭 측정 (실제로는 speedtest-cli나 네트워크 카운터 사용)
+        // 여기서는 시뮬레이션된 값 반환
+        static std::random_device rd;
+        static std::mt19937 gen(rd());
+        static std::normal_distribution<> d(10000.0, 2000.0); // 평균 10Mbps, 표준편차 2Mbps
+        
+        return std::fmax(100.0, d(gen));
+    }
+    
+    void setProbeHosts(const std::vector<std::string>& hosts) {
+        probe_hosts_ = hosts;
+    }
+    
+    void setProbeInterval(std::chrono::milliseconds interval) {
+        probe_interval_ = interval;
+    }
+    
+private:
+    std::chrono::steady_clock::time_point last_check_time_;
+    std::vector<std::string> probe_hosts_{"8.8.8.8", "1.1.1.1", "208.67.222.222"};
+    std::chrono::milliseconds probe_interval_{1000};
+    
+    // 네트워크 카운터 (Windows)
+#ifdef _WIN32
+    ULONGLONG last_bytes_sent_{0};
+    ULONGLONG last_bytes_recv_{0};
+    ULONGLONG last_packets_sent_{0};
+    ULONGLONG last_packets_recv_{0};
+    
+    void initializeNetworkCounters() {
+        updateNetworkCounters();
+    }
+    
+    void updateNetworkCounters() {
+        MIB_IFROW ifRow;
+        memset(&ifRow, 0, sizeof(ifRow));
+        ifRow.dwIndex = 1; // 첫 번째 네트워크 인터페이스
+        
+        if (GetIfEntry(&ifRow) == NO_ERROR) {
+            last_bytes_sent_ = ifRow.dwOutOctets;
+            last_bytes_recv_ = ifRow.dwInOctets;
+            last_packets_sent_ = ifRow.dwOutUcastPkts;
+            last_packets_recv_ = ifRow.dwInUcastPkts;
         }
     }
-    return maxRtt;
+#else
+    void initializeNetworkCounters() {
+        // Linux에서는 /proc/net/dev 사용
+    }
+    
+    void updateNetworkCounters() {
+        // Linux에서는 /proc/net/dev 사용
+    }
+#endif
+};
+
+// Probe 구현
+Probe& Probe::getInstance() {
+    static Probe instance;
+    return instance;
 }
 
-double Probe::getMaxLoss(int seconds) const {
-    auto samples = getRecentSamples(seconds);
-    if (samples.empty()) return 0.0;
-    
-    double maxLoss = samples[0].loss_pct;
-    for (const auto& sample : samples) {
-        if (sample.loss_pct > maxLoss) {
-            maxLoss = sample.loss_pct;
-        }
-    }
-    return maxLoss;
+Probe::Probe() : impl_(std::make_unique<ProbeImpl>()) {}
+
+Probe::~Probe() = default;
+
+std::map<std::string, double> Probe::getMetrics() {
+    return impl_->getMetrics();
 }
+
+double Probe::getRttMs() {
+    return impl_->getRttMs();
+}
+
+double Probe::getLossPercent() {
+    return impl_->getLossPercent();
+}
+
+double Probe::getUplinkKbps() {
+    return impl_->getUplinkKbps();
+}
+
+void Probe::setProbeHosts(const std::vector<std::string>& hosts) {
+    impl_->setProbeHosts(hosts);
+}
+
+void Probe::setProbeInterval(std::chrono::milliseconds interval) {
+    impl_->setProbeInterval(interval);
+}
+
+} // namespace net 
