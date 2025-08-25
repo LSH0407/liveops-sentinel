@@ -140,17 +140,20 @@ class IntegratedSettingsDialog(QDialog):
         obs_config = self.config.get("obs", {})
         self.obs_host_edit = QLineEdit(obs_config.get("host", "127.0.0.1"))
         self.obs_host_edit.setPlaceholderText("127.0.0.1")
+        self.obs_host_edit.setMinimumHeight(30)
         obs_layout.addRow("서버 IP:", self.obs_host_edit)
         
         # 서버 포트
         self.obs_port_edit = QLineEdit(str(obs_config.get("port", 4455)))
         self.obs_port_edit.setPlaceholderText("4455")
+        self.obs_port_edit.setMinimumHeight(30)
         obs_layout.addRow("서버 포트:", self.obs_port_edit)
         
         # 비밀번호
         self.obs_password_edit = QLineEdit(obs_config.get("password", ""))
         self.obs_password_edit.setPlaceholderText("비밀번호가 설정된 경우에만 입력")
         self.obs_password_edit.setEchoMode(QLineEdit.Password)
+        self.obs_password_edit.setMinimumHeight(30)
         obs_layout.addRow("비밀번호:", self.obs_password_edit)
         
         # TLS 체크박스

@@ -524,6 +524,9 @@ class DashboardView(QWidget):
             """)
             self._update_recommendation("실시간 모니터링이 활성화되었습니다. 메트릭이 실시간으로 업데이트됩니다.")
             self.debug_label.setText("디버그: 모니터링 시작됨")
+            
+            # 그래프 업데이트 활성화
+            self._enable_graphs(True)
         else:
             # 모니터링 중지
             self.monitoring_active = False
@@ -544,6 +547,25 @@ class DashboardView(QWidget):
             """)
             self._update_recommendation("모니터링이 중지되었습니다. 다시 시작하려면 버튼을 클릭하세요.")
             self.debug_label.setText("디버그: 모니터링 중지됨")
+            
+            # 그래프 업데이트 비활성화
+            self._enable_graphs(False)
+    
+    def _enable_graphs(self, enable: bool):
+        """그래프 업데이트 활성화/비활성화"""
+        graphs = [
+            self.rtt_graph, self.loss_graph, self.cpu_graph, self.gpu_graph
+        ]
+        
+        if not self.simple_mode:
+            graphs.extend([self.dropped_graph, self.lag_graph])
+        
+        for graph in graphs:
+            if hasattr(graph, 'update_timer'):
+                if enable:
+                    graph.update_timer.start()
+                else:
+                    graph.update_timer.stop()
     
     def _update_recommendation(self, message: str):
         """권장 조치 메시지 업데이트"""
@@ -754,15 +776,16 @@ class DashboardView(QWidget):
     def _on_obs_connected(self):
         """OBS 연결됨"""
         print("=== OBS 연결됨 ===")
-        self.debug_label.setText("디버그: OBS 연결됨 ✅")
+        self.debug_label.setText("디버그: OBS 연결됨 ✅ (메트릭 수집 중...)")
         print("OBS WebSocket 연결 성공")
         print("OBS 메트릭 수신 대기 중...")
     
     def _on_obs_disconnected(self):
         """OBS 연결 해제됨"""
         print("=== OBS 연결 끊김 ===")
-        self.debug_label.setText("디버그: OBS 연결 끊김 ❌")
+        self.debug_label.setText("디버그: OBS 연결 끊김 ❌ (재연결 시도 중...)")
         print("OBS WebSocket 연결 끊김")
+        print("메트릭 수집 루프에서 오류가 발생했을 수 있습니다.")
         
         # OBS 메트릭 초기화
         if not self.simple_mode:
@@ -784,6 +807,10 @@ class DashboardView(QWidget):
         
         # OBS 메트릭을 UI에 반영
         self._update_obs_metrics(metrics)
+        
+        # 연결 상태 업데이트
+        self.debug_label.setText("디버그: OBS 연결됨 ✅ (메트릭 수신 중)")
+        
         print(f"=== OBS 메트릭 처리 완료 ===")
     
     def _open_settings(self):

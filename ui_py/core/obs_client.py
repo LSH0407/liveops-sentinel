@@ -161,6 +161,8 @@ class ObsClient(QObject):
                 self.obs_disconnected.emit()
                 return
             
+            print("OBS 연결 성공, 메트릭 수집 루프 시작")
+            
             # 메트릭 수집 루프
             while self.is_running and self.is_connected:
                 try:
@@ -168,13 +170,21 @@ class ObsClient(QObject):
                     stats = self._cli.get_stream_status()
                     
                     # 메트릭 업데이트
+                    dropped_ratio = stats.dropped_frames / max(stats.total_frames, 1) if stats.total_frames > 0 else 0.0
+                    encoding_lag = stats.encoding_lag if hasattr(stats, 'encoding_lag') else 0.0
+                    render_lag = stats.render_lag if hasattr(stats, 'render_lag') else 0.0
+                    fps = stats.fps if hasattr(stats, 'fps') else 0.0
+                    bitrate = stats.bitrate / 1000.0 if hasattr(stats, 'bitrate') and stats.bitrate else 0.0
+                    
                     self.latest_metrics.update({
-                        'dropped_ratio': stats.dropped_frames / max(stats.total_frames, 1) if stats.total_frames > 0 else 0.0,
-                        'encoding_lag_ms': stats.encoding_lag,
-                        'render_lag_ms': stats.render_lag,
-                        'fps': stats.fps,
-                        'bitrate_kbps': stats.bitrate / 1000.0 if stats.bitrate else 0.0
+                        'dropped_ratio': dropped_ratio,
+                        'encoding_lag_ms': encoding_lag,
+                        'render_lag_ms': render_lag,
+                        'fps': fps,
+                        'bitrate_kbps': bitrate
                     })
+                    
+                    print(f"OBS 메트릭 업데이트: dropped={dropped_ratio:.3f}, enc_lag={encoding_lag}ms, render_lag={render_lag}ms, fps={fps}, bitrate={bitrate:.1f}kbps")
                     
                     # 콜백 호출
                     if self.metrics_callback:
@@ -185,14 +195,21 @@ class ObsClient(QObject):
                     
                 except Exception as e:
                     print(f"OBS 메트릭 조회 오류: {e}")
-                    self.is_connected = False
-                    self.obs_disconnected.emit()
-                    break
+                    print("연결을 유지하고 재시도합니다...")
+                    
+                    # 오류 발생 시에도 기본 메트릭 전송 (연결 유지를 위해)
+                    if self.metrics_callback:
+                        self.metrics_callback(self.latest_metrics)
+                    self.obs_metrics_updated.emit(self.latest_metrics)
+                    
+                    continue
                 
                 time.sleep(1)  # 1초 간격
                 
         except Exception as e:
             print(f"OBS 메트릭 루프 오류: {e}")
+            import traceback
+            traceback.print_exc()
             self.is_connected = False
             self.obs_disconnected.emit()
         finally:
