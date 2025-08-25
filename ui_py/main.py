@@ -45,48 +45,71 @@ def setup_dark_theme(app):
 
 
 def main():
-    app = QtWidgets.QApplication(sys.argv)
-    
-    # 고DPI 및 다크 테마 설정
-    setup_high_dpi()
-    setup_dark_theme(app)
-    
-    # 로깅 시스템 초기화
-    setup_logging()
-    
-    # 설정 로드
-    cfg = load()
-    
-    # 첫 실행 시 설정 마법사
-    if not cfg.get("backend_path") or not Path(cfg["backend_path"]).exists():
-        wizard = SetupWizard(cfg)
-        if wizard.exec() == QtWidgets.QDialog.Accepted:
-            cfg = wizard.result_config()
-            save(cfg)
-        else:
-            sys.exit(0)
-    
-    # 백엔드 경로 결정 (설정 우선, 없으면 기본값)
-    backend_path = cfg.get("backend_path", "")
-    if not backend_path or not Path(backend_path).exists():
-        backend_path = default_backend_path()
-    
-    # MetricBus 초기화
-    metric_bus = MetricBus(backend_path)
-    metric_bus.start()
-    
-    # 대시보드 뷰 생성
-    dashboard = DashboardView(metric_bus)
-    dashboard.set_current_bitrate(cfg.get("current_bitrate_kbps", 6000))
-    
-    # 윈도우 설정
-    dashboard.setWindowTitle("LiveOps Sentinel • 모니터링")
-    dashboard.resize(1400, 900)
-    dashboard.show()
+    try:
+        app = QtWidgets.QApplication(sys.argv)
+        
+        # 고DPI 및 다크 테마 설정
+        setup_high_dpi()
+        setup_dark_theme(app)
+        
+        # 로깅 시스템 초기화
+        setup_logging()
+        
+        # 설정 로드
+        cfg = load()
+        
+        # 백엔드 경로 결정 (설정 우선, 없으면 기본값)
+        backend_path = cfg.get("backend_path", "")
+        if not backend_path or not Path(backend_path).exists():
+            backend_path = default_backend_path()
+        
+        # MetricBus 초기화
+        metric_bus = MetricBus(backend_path)
+        metric_bus.start()
+        
+        # 대시보드 뷰 생성
+        dashboard = DashboardView(metric_bus, cfg)
+        dashboard.set_current_bitrate(cfg.get("current_bitrate_kbps", 6000))
+        
+        # 윈도우 설정
+        dashboard.setWindowTitle("LiveOps Sentinel • 모니터링")
+        dashboard.resize(1400, 900)
+        
+        # 윈도우 위치 조정 (화면 중앙에 위치)
+        screen = app.primaryScreen()
+        screen_geometry = screen.geometry()
+        window_geometry = dashboard.geometry()
+        
+        x = (screen_geometry.width() - window_geometry.width()) // 2
+        y = (screen_geometry.height() - window_geometry.height()) // 2
+        y = max(50, y)  # 최소 50px 위쪽 여백 확보
+        
+        dashboard.move(x, y)
+        dashboard.show()
 
-    ret = app.exec()
-    metric_bus.stop()
-    sys.exit(ret)
+        ret = app.exec()
+        
+        # 안전한 종료
+        try:
+            metric_bus.stop()
+        except:
+            pass
+        
+        # 모든 프로세스 강제 종료
+        try:
+            import subprocess
+            subprocess.run(['taskkill', '/f', '/im', 'liveops_backend.exe'], 
+                         capture_output=True, timeout=5)
+        except:
+            pass
+        
+        sys.exit(ret)
+        
+    except Exception as e:
+        print(f"애플리케이션 시작 오류: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

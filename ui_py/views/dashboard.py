@@ -3,6 +3,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
                                QComboBox, QGroupBox)
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont
+from .integrated_settings_dialog import IntegratedSettingsDialog
 
 from widgets.status_card import StatusCard
 from widgets.gauge import GaugeWidget
@@ -15,27 +16,32 @@ from core.obs_client import ObsClient
 class DashboardView(QWidget):
     """메인 대시보드 뷰"""
     
-    def __init__(self, metric_bus: MetricBus, parent=None):
+    def __init__(self, metric_bus: MetricBus, config=None, parent=None):
         super().__init__(parent)
         self.metric_bus = metric_bus
+        self.config = config or {}
         self.quality_score = QualityScore()
         self.current_bitrate_kbps = 6000  # Default
         self.simple_mode = False
         self.metrics_window = []  # Recent metrics for scoring
         self.monitoring_active = False  # 모니터링 활성화 상태
         
-        # OBS 클라이언트 초기화 (콜백 방식)
-        self.obs_client = ObsClient(self)
-        self.obs_client.set_connected_callback(self._on_obs_connected)
-        self.obs_client.set_disconnected_callback(self._on_obs_disconnected)
-        self.obs_client.set_metrics_callback(self._on_obs_metrics_updated)
+        # OBS 클라이언트 초기화 (시그널 방식)
+        obs_host = self.config.get("obs_host", "localhost")
+        obs_port = self.config.get("obs_port", 4455)
+        obs_password = self.config.get("obs_password", "")
+        
+        self.obs_client = ObsClient(host=obs_host, port=obs_port, password=obs_password)
+        self.obs_client.obs_connected.connect(self._on_obs_connected)
+        self.obs_client.obs_disconnected.connect(self._on_obs_disconnected)
+        self.obs_client.obs_metrics_updated.connect(self._on_obs_metrics_updated)
         
         self._setup_ui()
         self._setup_connections()
         self._apply_dark_theme()
         
         # OBS 연결 시작
-        self.obs_client.start_connection()
+        self.obs_client.start()
         
         # 초기 권장 조치 메시지 설정
         self._update_recommendation("실시간 모니터링을 시작하려면 상단의 빨간 버튼을 클릭하세요.")
@@ -68,12 +74,36 @@ class DashboardView(QWidget):
         # Bottom bar: Recommendations
         bottom_bar = self._create_bottom_bar()
         layout.addWidget(bottom_bar)
+        
+        # 디버그 정보 표시용 라벨 추가
+        self.debug_label = QLabel("디버그: 대기 중")
+        self.debug_label.setStyleSheet("""
+            QLabel {
+                color: #ffff00;
+                font-size: 10px;
+                padding: 2px;
+                background-color: #333333;
+                border: 1px solid #555555;
+            }
+        """)
+        layout.addWidget(self.debug_label)
     
     def _create_top_bar(self) -> QWidget:
         """상단 컨트롤 바 생성"""
         widget = QWidget()
         layout = QHBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
+        
+        # 백엔드 연결 상태 표시
+        self.backend_status_label = QLabel("백엔드: 연결 대기 중")
+        self.backend_status_label.setStyleSheet("""
+            QLabel {
+                color: #ffaa00;
+                font-size: 11px;
+                padding: 4px;
+            }
+        """)
+        layout.addWidget(self.backend_status_label)
         
         # Title
         title = QLabel("LiveOps Sentinel • 모니터링")
@@ -120,6 +150,24 @@ class DashboardView(QWidget):
         
         self.platform_combo.currentTextChanged.connect(self._on_platform_changed)
         layout.addWidget(self.platform_combo)
+        
+        # 설정 버튼 추가
+        self.settings_button = QPushButton("설정")
+        self.settings_button.setStyleSheet("""
+            QPushButton {
+                background-color: #404040;
+                border: 1px solid #606060;
+                border-radius: 4px;
+                padding: 4px 8px;
+                color: #ffffff;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background-color: #505050;
+            }
+        """)
+        self.settings_button.clicked.connect(self._open_settings)
+        layout.addWidget(self.settings_button)
         
         layout.addStretch()
         
@@ -312,11 +360,17 @@ class DashboardView(QWidget):
         # Subscribe to metric updates
         self.metric_bus.subscribe(self._on_metrics_update)
         
+        # 백엔드 연결 상태 모니터링
+        self.metric_bus.connection_lost.connect(self._on_backend_disconnected)
+        self.metric_bus.connection_established.connect(self._on_backend_connected)
+        
         # Setup graphs
         self._setup_graphs()
     
     def _setup_graphs(self):
         """그래프 설정"""
+        print("그래프 설정 시작")
+        
         # Network graphs
         self.rtt_graph.set_series(self.metric_bus, "net.rtt_ms", "ms", "#00ff00")
         self.loss_graph.set_series(self.metric_bus, "net.loss_pct", "%", "#ffaa00")
@@ -328,6 +382,8 @@ class DashboardView(QWidget):
         # OBS graphs
         self.dropped_graph.set_series(self.metric_bus, "obs.dropped_ratio", "%", "#ff00ff")
         self.lag_graph.set_series(self.metric_bus, "obs.enc_lag_ms", "ms", "#00ffff")
+        
+        print("그래프 설정 완료")
     
     def _apply_dark_theme(self):
         """다크 테마 적용"""
@@ -340,14 +396,27 @@ class DashboardView(QWidget):
     
     def _on_metrics_update(self, metrics: dict):
         """메트릭 업데이트 처리"""
+        print(f"대시보드 메트릭 업데이트: {metrics}")
+        
         # 모니터링이 활성화된 경우에만 업데이트
         if not self.monitoring_active:
+            print("모니터링이 비활성화되어 있음")
             return
             
+        print("모니터링 활성화됨 - 메트릭 처리 중")
+        
+        # 디버그 정보 업데이트
+        cpu = metrics.get('cpu_pct', 0)
+        gpu = metrics.get('gpu_pct', 0)
+        rtt = metrics.get('rtt_ms', 0)
+        self.debug_label.setText(f"디버그: CPU={cpu:.1f}%, GPU={gpu:.1f}%, RTT={rtt:.1f}ms")
+        
         # Store in window for scoring
         self.metrics_window.append(metrics)
         if len(self.metrics_window) > 50:  # Keep last 50 samples
             self.metrics_window.pop(0)
+        
+        print(f"메트릭 윈도우에 저장됨: 현재 {len(self.metrics_window)}개 샘플")
         
         # Update KPI cards
         self._update_kpi_cards(metrics)
@@ -406,11 +475,21 @@ class DashboardView(QWidget):
     
     def _update_quality_score(self):
         """품질 점수 업데이트"""
+        print(f"=== 품질 점수 디버그 ===")
+        print(f"metrics_window 크기 = {len(self.metrics_window)}")
+        
         if not self.metrics_window:
+            print("metrics_window가 비어있음")
             return
+        
+        # 최근 메트릭 상세 출력
+        if self.metrics_window:
+            latest = self.metrics_window[-1]
+            print(f"최근 메트릭: {latest}")
         
         # Calculate quality score
         result = self.quality_score.compute_quality(self.metrics_window, self.current_bitrate_kbps)
+        print(f"품질 점수 계산 결과: {result}")
         
         # Update gauge
         self.quality_gauge.set_score(result['score'])
@@ -419,6 +498,7 @@ class DashboardView(QWidget):
         
         # Update recommendation
         self.recommendation_label.setText(result['action'])
+        print(f"=== 품질 점수 디버그 끝 ===")
     
     def _toggle_monitoring(self):
         """실시간 모니터링 토글"""
@@ -441,6 +521,7 @@ class DashboardView(QWidget):
                 }
             """)
             self._update_recommendation("실시간 모니터링이 활성화되었습니다. 메트릭이 실시간으로 업데이트됩니다.")
+            self.debug_label.setText("디버그: 모니터링 시작됨")
         else:
             # 모니터링 중지
             self.monitoring_active = False
@@ -460,10 +541,33 @@ class DashboardView(QWidget):
                 }
             """)
             self._update_recommendation("모니터링이 중지되었습니다. 다시 시작하려면 버튼을 클릭하세요.")
+            self.debug_label.setText("디버그: 모니터링 중지됨")
     
     def _update_recommendation(self, message: str):
         """권장 조치 메시지 업데이트"""
         self.recommendation_label.setText(message)
+        
+    def _on_backend_disconnected(self):
+        """백엔드 연결 끊김 처리"""
+        self.backend_status_label.setText("백엔드: 연결 끊김")
+        self.backend_status_label.setStyleSheet("""
+            QLabel {
+                color: #ff4444;
+                font-size: 11px;
+                padding: 4px;
+            }
+        """)
+        
+    def _on_backend_connected(self):
+        """백엔드 연결됨 처리"""
+        self.backend_status_label.setText("백엔드: 연결됨")
+        self.backend_status_label.setStyleSheet("""
+            QLabel {
+                color: #44ff44;
+                font-size: 11px;
+                padding: 4px;
+            }
+        """)
     
     def _toggle_mode(self, simple_mode: bool):
         """간단/전문 모드 토글"""
@@ -491,41 +595,67 @@ class DashboardView(QWidget):
     
     def _run_diagnostic(self):
         """진단 모드 실행"""
+        print("진단 모드 버튼 클릭됨")
+        self.debug_label.setText("디버그: 진단 모드 버튼 클릭됨")
         try:
             from actions.diagnose import DiagnosticDialog
+            print("DiagnosticDialog 모듈 로드 성공")
+            self.debug_label.setText("디버그: DiagnosticDialog 모듈 로드 성공")
             
             # 현재 선택된 플랫폼 가져오기
             platform_key = self.platform_combo.currentData()
             if not platform_key:
                 platform_key = "soop"  # 기본값
+            print(f"선택된 플랫폼: {platform_key}")
             
             # 진단 다이얼로그 실행 (60초)
+            print("진단 다이얼로그 시작...")
+            self.debug_label.setText("디버그: 진단 다이얼로그 시작...")
             dialog = DiagnosticDialog(60, platform_key, self.metric_bus, self)
             dialog.exec()
+            print("진단 다이얼로그 완료")
+            self.debug_label.setText("디버그: 진단 다이얼로그 완료")
             
         except ImportError as e:
             print(f"진단 모드 모듈을 불러올 수 없습니다: {e}")
+            self.debug_label.setText(f"디버그: ImportError - {e}")
         except Exception as e:
             print(f"진단 모드 실행 중 오류: {e}")
+            self.debug_label.setText(f"디버그: 오류 - {e}")
+            import traceback
+            traceback.print_exc()
     
     def _run_benchmark(self):
         """벤치마크 실행"""
+        print("벤치마크 버튼 클릭됨")
+        self.debug_label.setText("디버그: 벤치마크 버튼 클릭됨")
         try:
             from actions.diagnose import DiagnosticDialog
+            print("DiagnosticDialog 모듈 로드 성공 (벤치마크)")
+            self.debug_label.setText("디버그: DiagnosticDialog 모듈 로드 성공 (벤치마크)")
             
             # 현재 선택된 플랫폼 가져오기
             platform_key = self.platform_combo.currentData()
             if not platform_key:
                 platform_key = "soop"  # 기본값
+            print(f"선택된 플랫폼 (벤치마크): {platform_key}")
             
             # 벤치마크 다이얼로그 실행 (10초)
+            print("벤치마크 다이얼로그 시작...")
+            self.debug_label.setText("디버그: 벤치마크 다이얼로그 시작...")
             dialog = DiagnosticDialog(10, platform_key, self.metric_bus, self)
             dialog.exec()
+            print("벤치마크 다이얼로그 완료")
+            self.debug_label.setText("디버그: 벤치마크 다이얼로그 완료")
             
         except ImportError as e:
             print(f"벤치마크 모듈을 불러올 수 없습니다: {e}")
+            self.debug_label.setText(f"디버그: ImportError (벤치마크) - {e}")
         except Exception as e:
             print(f"벤치마크 실행 중 오류: {e}")
+            self.debug_label.setText(f"디버그: 오류 (벤치마크) - {e}")
+            import traceback
+            traceback.print_exc()
     
     # Grade calculation helpers
     def _get_grade_for_rtt(self, rtt: float) -> str:
@@ -621,36 +751,178 @@ class DashboardView(QWidget):
     
     def _on_obs_connected(self):
         """OBS 연결됨"""
-        print("OBS 연결됨")
-        # OBS 연결 상태를 UI에 반영할 수 있음
+        print("=== OBS 연결됨 ===")
+        self.debug_label.setText("디버그: OBS 연결됨 ✅")
+        print("OBS WebSocket 연결 성공")
+        print("OBS 메트릭 수신 대기 중...")
     
     def _on_obs_disconnected(self):
         """OBS 연결 해제됨"""
-        print("OBS 연결 해제됨")
-        # OBS 연결 해제 상태를 UI에 반영할 수 있음
+        print("=== OBS 연결 끊김 ===")
+        self.debug_label.setText("디버그: OBS 연결 끊김 ❌")
+        print("OBS WebSocket 연결 끊김")
+        
+        # OBS 메트릭 초기화
+        if not self.simple_mode:
+            self.dropped_card.set_value(0)
+            self.enc_lag_card.set_value(0)
+            self.render_lag_card.set_value(0)
     
     def _on_obs_metrics_updated(self, metrics: dict):
         """OBS 메트릭 업데이트"""
+        print(f"=== OBS 메트릭 수신됨 ===")
+        print(f"수신된 메트릭: {metrics}")
+        
         # OBS 메트릭을 메트릭 버스에 전달
         if hasattr(self.metric_bus, 'update_obs_metrics'):
+            print("메트릭 버스에 OBS 메트릭 전달")
             self.metric_bus.update_obs_metrics(metrics)
+        else:
+            print("메트릭 버스에 update_obs_metrics 메서드 없음")
         
         # OBS 메트릭을 UI에 반영
         self._update_obs_metrics(metrics)
+        print(f"=== OBS 메트릭 처리 완료 ===")
+    
+    def _open_settings(self):
+        """통합 설정 다이얼로그 열기"""
+        try:
+            # 디버그 메시지 추가
+            self.debug_label.setText("디버그: 설정 다이얼로그 열기 시도 중...")
+            print("설정 버튼 클릭됨 - 다이얼로그 열기 시도")
+            
+            from settings import save, load
+            current_config = load()
+            
+            print(f"현재 설정 로드됨: {current_config}")
+            
+            dialog = IntegratedSettingsDialog(current_config, self)
+            
+            print("다이얼로그 표시 중...")
+            result = dialog.exec()
+            print(f"다이얼로그 결과: {result}")
+            
+            if result == IntegratedSettingsDialog.Accepted:
+                # 설정값 저장
+                new_settings = dialog.get_settings()
+                print(f"새 설정값: {new_settings}")
+                
+                # 설정 파일에 저장
+                save(new_settings)
+                
+                # 백엔드 경로 업데이트
+                if new_settings.get('backend_path') and new_settings['backend_path'] != self.config.get('backend_path'):
+                    self.config['backend_path'] = new_settings['backend_path']
+                    # 메트릭 버스 재시작
+                    if hasattr(self.metric_bus, 'stop'):
+                        self.metric_bus.stop()
+                    if hasattr(self.metric_bus, 'start'):
+                        self.metric_bus.start()
+                
+                # OBS 클라이언트 재설정
+                if hasattr(self.metric_bus, 'reconfigure_obs_client'):
+                    print("메트릭 버스를 통해 OBS 클라이언트 재설정")
+                    self.metric_bus.reconfigure_obs_client(
+                        host=new_settings.get('obs_host', 'localhost'),
+                        port=new_settings.get('obs_port', 4455),
+                        password=new_settings.get('obs_password', '')
+                    )
+                else:
+                    print("메트릭 버스에 reconfigure_obs_client 메서드 없음")
+                    # 기존 방식으로 OBS 클라이언트 재시작
+                    if hasattr(self.obs_client, 'stop'):
+                        self.obs_client.stop()
+                    
+                    # 새로운 설정으로 OBS 클라이언트 재생성
+                    from core.obs_client import ObsClient
+                    self.obs_client = ObsClient(
+                        host=new_settings.get('obs_host', 'localhost'),
+                        port=new_settings.get('obs_port', 4455),
+                        password=new_settings.get('obs_password', '')
+                    )
+                    self.obs_client.obs_connected.connect(self._on_obs_connected)
+                    self.obs_client.obs_disconnected.connect(self._on_obs_disconnected)
+                    self.obs_client.obs_metrics_updated.connect(self._on_obs_metrics_updated)
+                    
+                    # OBS 연결 시작
+                    self.obs_client.start()
+                
+                # 설정 업데이트
+                self.config.update(new_settings)
+                
+                print(f"설정 업데이트 완료: {new_settings}")
+                self.debug_label.setText("디버그: 설정 업데이트 완료")
+                
+        except Exception as e:
+            error_msg = f"설정 다이얼로그 오류: {e}"
+            print(error_msg)
+            self.debug_label.setText(f"디버그: {error_msg}")
+            import traceback
+            traceback.print_exc()
     
     def _update_obs_metrics(self, metrics: dict):
         """OBS 메트릭을 UI에 반영"""
+        print(f"=== OBS 메트릭 업데이트 디버그 ===")
+        print(f"받은 OBS 메트릭: {metrics}")
+        
         # 드롭된 프레임 비율
         dropped_ratio = metrics.get('dropped_ratio', 0) * 100
+        print(f"드롭된 프레임 비율: {dropped_ratio:.1f}%")
         self.dropped_card.update_value(dropped_ratio, f"{dropped_ratio:.1f}%")
         self.dropped_card.update_status(self._get_grade_for_dropped(dropped_ratio))
         
         # 인코딩 지연
         enc_lag = metrics.get('encoding_lag_ms', 0)
+        print(f"인코딩 지연: {enc_lag:.1f}ms")
         self.enc_lag_card.update_value(enc_lag, f"{enc_lag:.1f}ms")
         self.enc_lag_card.update_status(self._get_grade_for_enc_lag(enc_lag))
         
         # 렌더링 지연
         render_lag = metrics.get('render_lag_ms', 0)
+        print(f"렌더링 지연: {render_lag:.1f}ms")
         self.render_lag_card.update_value(render_lag, f"{render_lag:.1f}ms")
         self.render_lag_card.update_status(self._get_grade_for_render_lag(render_lag))
+        
+        print(f"=== OBS 메트릭 업데이트 디버그 끝 ===")
+    
+    def closeEvent(self, event):
+        """윈도우 종료 시 정리 작업"""
+        try:
+            print("대시보드 종료 중...")
+            if hasattr(self, 'metric_bus') and self.metric_bus:
+                try:
+                    self.metric_bus.stop()
+                except Exception as e:
+                    print(f"메트릭 버스 종료 오류: {e}")
+            
+            if hasattr(self, 'obs_client') and self.obs_client:
+                try:
+                    self.obs_client.stop()
+                except Exception as e:
+                    print(f"OBS 클라이언트 종료 오류: {e}")
+            
+            print("대시보드 종료 완료")
+            event.accept()
+        except Exception as e:
+            print(f"대시보드 종료 중 오류: {e}")
+            import traceback
+            traceback.print_exc()
+            event.accept()
+    
+    def resizeEvent(self, event):
+        """윈도우 크기 변경 시 안전하게 처리"""
+        try:
+            super().resizeEvent(event)
+        except Exception as e:
+            print(f"윈도우 크기 변경 오류: {e}")
+            # 오류가 발생해도 기본 동작 수행
+            event.accept()
+    
+    def moveEvent(self, event):
+        """윈도우 이동 시 안전하게 처리"""
+        try:
+            super().moveEvent(event)
+        except Exception as e:
+            print(f"윈도우 이동 오류: {e}")
+            # 오류가 발생해도 기본 동작 수행
+            event.accept()

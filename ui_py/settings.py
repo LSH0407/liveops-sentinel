@@ -14,7 +14,10 @@ DEFAULTS = {
     "autostart_backend": True,
     "simpleMode": False,
     "theme": "dark",
-    "current_bitrate_kbps": 6000
+    "current_bitrate_kbps": 6000,
+    "obs_host": "localhost",
+    "obs_port": 4455,
+    "obs_password": ""
 }
 
 def setup_logging():

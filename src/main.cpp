@@ -6,6 +6,7 @@
 #include <atomic>
 #include <sstream>
 #include <iomanip>
+#include <nlohmann/json.hpp>
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -47,17 +48,21 @@ void collectAndOutputMetrics() {
     auto now = std::chrono::system_clock::now();
     auto ts = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
     
-    // JSONL 형식으로 출력 (GUI 호환)
-    std::cout << "{";
-    std::cout << "\"event\":\"metrics\",";
-    std::cout << "\"ts\":" << ts << ",";
-    std::cout << "\"cpu_pct\":" << sys_metrics["cpu_pct"] << ",";
-    std::cout << "\"memory_pct\":" << sys_metrics["memory_pct"] << ",";
-    std::cout << "\"mem_mb\":" << sys_metrics["memory_mb"] << ",";
-    std::cout << "\"rtt_ms\":" << net_metrics["rtt_ms"] << ",";
-    std::cout << "\"loss_pct\":" << net_metrics["loss_pct"] << ",";
-    std::cout << "\"uplink_kbps\":" << net_metrics["uplink_kbps"];
-    std::cout << "}" << std::endl;
+    // JSONL 형식으로 출력 (GUI 호환) - 줄단위로 보장
+    nlohmann::json snapshot = {
+        {"event", "metrics"},
+        {"ts", ts},
+        {"cpu_pct", sys_metrics["cpu_pct"]},
+        {"memory_pct", sys_metrics["memory_pct"]},
+        {"mem_mb", sys_metrics["memory_mb"]},
+        {"gpu_pct", sys_metrics["gpu_pct"]},  // GPU 메트릭 추가
+        {"rtt_ms", net_metrics["rtt_ms"]},
+        {"loss_pct", net_metrics["loss_pct"]},
+        {"uplink_kbps", net_metrics["uplink_kbps"]}
+    };
+    
+    std::string line = snapshot.dump();
+    std::cout << line << "\n";  // 개행으로 라인 경계 보장
 }
 
 // 메인 루프
@@ -145,9 +150,17 @@ void processCommand(const std::string& command_line) {
 }
 
 int main(int argc, char* argv[]) {
-    // 콘솔 출력 인코딩 설정 (Windows)
+    // 표준출력 즉시 플러시 설정
+    std::ios::sync_with_stdio(false);
+    std::cout.setf(std::ios::unitbuf);            // << 할 때마다 자동 flush
+    setvbuf(stdout, nullptr, _IONBF, 0);          // C stdout도 무버퍼(Windows에서도 OK)
+    
+    // 레디 배너 출력
 #ifdef _WIN32
     SetConsoleOutputCP(CP_UTF8);
+    std::cout << "BACKEND_READY pid=" << GetCurrentProcessId() << "\n";
+#else
+    std::cout << "BACKEND_READY pid=" << getpid() << "\n";
 #endif
     
     // 시그널 핸들러 설정

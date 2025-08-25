@@ -63,6 +63,10 @@ class QualityScore:
             headroom_pct = max(0, (uplink_kbps - current_bitrate_kbps) / current_bitrate_kbps * 100)
             reasons.append(f"업로드 대역폭 부족 (여유율 {headroom_pct:.1f}%)")
         
+        print(f"품질 점수 계산 상세: RTT={recent_metrics.get('rtt_ms', 0)}, Loss={recent_metrics.get('loss_pct', 0)}, Uplink={uplink_kbps}")
+        print(f"품질 점수 계산 상세: CPU={recent_metrics.get('cpu_pct', 0)}, GPU={recent_metrics.get('gpu_pct', 0)}")
+        print(f"품질 점수 계산 상세: Dropped={recent_metrics.get('dropped_ratio', 0)}, EncLag={recent_metrics.get('enc_lag_ms', 0)}")
+        
         # OBS 점수들
         dropped_score = self._normalize_dropped_ratio(recent_metrics.get('dropped_ratio', 0))
         scores['dropped_ratio'] = dropped_score
@@ -99,19 +103,34 @@ class QualityScore:
     def _calculate_recent_averages(self, metrics_window: List[Dict]) -> Dict[str, float]:
         """최근 메트릭들의 평균값 계산"""
         if not metrics_window:
+            print("품질 점수 계산: metrics_window가 비어있음")
             return {}
         
         # 최근 5초 데이터만 사용
         recent_data = metrics_window[-5:] if len(metrics_window) > 5 else metrics_window
+        print(f"품질 점수 계산: 최근 {len(recent_data)}개 메트릭 사용")
         
-        averages = {}
+        # 각 메트릭별로 평균 계산
+        metric_sums = {}
+        metric_counts = {}
+        
         for metric in recent_data:
+            print(f"처리 중인 메트릭: {metric}")
             for key, value in metric.items():
-                if key not in averages:
-                    averages[key] = []
-                averages[key].append(value)
+                if isinstance(value, (int, float)):  # 숫자만 처리
+                    if key not in metric_sums:
+                        metric_sums[key] = 0
+                        metric_counts[key] = 0
+                    metric_sums[key] += value
+                    metric_counts[key] += 1
         
-        return {key: sum(values) / len(values) for key, values in averages.items()}
+        result = {}
+        for key in metric_sums:
+            if metric_counts[key] > 0:
+                result[key] = metric_sums[key] / metric_counts[key]
+        
+        print(f"품질 점수 계산: 평균값 = {result}")
+        return result
     
     def _normalize_rtt(self, rtt_ms: float) -> float:
         """RTT 정규화 (20ms=100, 80ms=60, 150ms=30, 300ms=0)"""

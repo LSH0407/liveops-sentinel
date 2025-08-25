@@ -1,6 +1,6 @@
 from PySide6.QtCore import QTimer, Qt, QPointF
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame
-from PySide6.QtGui import QPainter, QPen, QBrush, QColor, QPolygonF
+from PySide6.QtGui import QPainter, QPen, QBrush, QColor, QPolygonF, QFont
 import time
 from typing import List, Tuple, Optional, Dict
 
@@ -32,70 +32,104 @@ class SimpleGraphWidget(QFrame):
     
     def paintEvent(self, event):
         """그래프 그리기"""
-        if not self.data_points:
-            return
+        try:
+            if not self.data_points:
+                return
+                
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.Antialiasing)
             
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        
-        # 배경
-        painter.fillRect(self.rect(), QColor(0, 0, 0))
-        
-        # 데이터 필터링 (시간 윈도우)
-        now = time.time()
-        window_data = [(ts, val) for ts, val in self.data_points if now - ts <= self.window_seconds]
-        
-        if not window_data:
-            return
-        
-        # 좌표 변환
-        width = self.width()
-        height = self.height()
-        
-        # Y 범위 계산
-        values = [val for _, val in window_data]
-        if not values:
-            return
+            # 배경
+            painter.fillRect(self.rect(), QColor(0, 0, 0))
             
-        min_val = min(values)
-        max_val = max(values)
-        if min_val == max_val:
-            min_val -= 1
-            max_val += 1
-        
-        # X 범위
-        x_min = now - self.window_seconds
-        x_max = now
-        
-        # 포인트 변환
-        points = []
-        for ts, val in window_data:
-            x = width * (ts - x_min) / (x_max - x_min)
-            y = height * (1.0 - (val - min_val) / (max_val - min_val))
-            points.append(QPointF(x, y))
-        
-        if len(points) < 2:
-            return
-        
-        # 선 그리기
-        pen = QPen(self.color, 2)
-        painter.setPen(pen)
-        
-        # 선 그리기
-        for i in range(len(points) - 1):
-            painter.drawLine(points[i], points[i + 1])
-        
-        # 채우기
-        if self.fill_under and len(points) >= 2:
-            fill_color = QColor(self.color)
-            fill_color.setAlpha(80)
-            painter.setBrush(QBrush(fill_color))
+            # 데이터 필터링 (시간 윈도우)
+            now = time.time()
+            window_data = [(ts, val) for ts, val in self.data_points if now - ts <= self.window_seconds]
             
-            polygon = QPolygonF(points)
-            polygon.append(QPointF(points[-1].x(), height))
-            polygon.append(QPointF(points[0].x(), height))
+            if not window_data:
+                return
             
-            painter.drawPolygon(polygon)
+            # 좌표 변환
+            width = self.width()
+            height = self.height()
+            
+            if width <= 0 or height <= 0:
+                return
+            
+            # Y 범위 계산
+            values = [val for _, val in window_data]
+            if not values:
+                return
+                
+            min_val = min(values)
+            max_val = max(values)
+            if min_val == max_val:
+                min_val -= 1
+                max_val += 1
+            
+            # X 범위
+            x_min = now - self.window_seconds
+            x_max = now
+            
+            # 포인트 변환
+            points = []
+            for ts, val in window_data:
+                try:
+                    x = width * (ts - x_min) / (x_max - x_min)
+                    y = height * (1.0 - (val - min_val) / (max_val - min_val))
+                    points.append(QPointF(x, y))
+                except (ZeroDivisionError, ValueError):
+                    continue
+            
+            if len(points) < 2:
+                return
+            
+            # 선 그리기
+            pen = QPen(self.color, 2)
+            painter.setPen(pen)
+            
+            # 선 그리기
+            for i in range(len(points) - 1):
+                painter.drawLine(points[i], points[i + 1])
+            
+            # 채우기
+            if self.fill_under and len(points) >= 2:
+                fill_color = QColor(self.color)
+                fill_color.setAlpha(80)
+                painter.setBrush(QBrush(fill_color))
+                
+                polygon = QPolygonF(points)
+                polygon.append(QPointF(points[-1].x(), height))
+                polygon.append(QPointF(points[0].x(), height))
+                
+                painter.drawPolygon(polygon)
+                
+        except Exception as e:
+            print(f"그래프 그리기 오류: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        # Y축 최대값 표시
+        painter.setPen(QPen(QColor(128, 128, 128), 1))
+        painter.setFont(QFont("Arial", 8))
+        
+        # 최대값 텍스트
+        max_text = f"{max_val:.1f}"
+        if hasattr(self, 'units') and self.units:
+            max_text += f" {self.units}"
+        
+        # 텍스트 위치 계산 (우상단)
+        text_rect = painter.fontMetrics().boundingRect(max_text)
+        text_x = width - text_rect.width() - 5
+        text_y = text_rect.height() + 5
+        
+        # 배경 박스
+        painter.fillRect(text_x - 2, text_y - text_rect.height() - 2, 
+                        text_rect.width() + 4, text_rect.height() + 4, 
+                        QColor(0, 0, 0, 180))
+        
+        # 텍스트 그리기
+        painter.drawText(text_x, text_y, max_text)
 
 class MetricGraph(QWidget):
     """작업관리자 스타일 메트릭 그래프 (numpy 없이)"""
@@ -148,6 +182,9 @@ class MetricGraph(QWidget):
         self.metric_key = key
         self.units = units
         
+        # 그래프 위젯에도 units 전달
+        self.graph_widget.units = units
+        
         if color:
             self.color = color
             # Convert hex color to QColor
@@ -182,6 +219,10 @@ class MetricGraph(QWidget):
         if not self.metric_bus or not self.metric_key:
             return
         
+        # 모니터링이 활성화되지 않았으면 업데이트하지 않음
+        if hasattr(self.metric_bus, 'is_running') and not self.metric_bus.is_running:
+            return
+        
         # Get time series data
         series = self.metric_bus.series(self.metric_key)
         if not series:
@@ -201,6 +242,9 @@ class MetricGraph(QWidget):
         
         # Update graph
         self.graph_widget.set_data(window_data)
+        
+        # 디버그 출력
+        print(f"그래프 업데이트: {self.metric_key}, 데이터 포인트: {len(window_data)}")
     
     def set_title(self, title: str):
         """제목 설정"""

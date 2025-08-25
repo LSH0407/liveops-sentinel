@@ -4,6 +4,8 @@
 #include <thread>
 #include <fstream>
 #include <sstream>
+#include <cstdlib>
+#include <ctime>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -46,6 +48,8 @@ public:
         
         metrics["cpu_pct"] = getCpuUsage();
         metrics["memory_pct"] = getMemoryUsage();
+        metrics["memory_mb"] = getMemoryMB();
+        metrics["gpu_pct"] = getGpuUsage();
         metrics["disk_pct"] = getDiskUsage();
         
         return metrics;
@@ -83,6 +87,40 @@ public:
 #endif
     }
     
+    double getMemoryMB() {
+#ifdef _WIN32
+        MEMORYSTATUSEX memInfo;
+        memInfo.dwLength = sizeof(MEMORYSTATUSEX);
+        GlobalMemoryStatusEx(&memInfo);
+        
+        return static_cast<double>(memInfo.ullTotalPhys - memInfo.ullAvailPhys) / (1024 * 1024);
+#else
+        struct sysinfo si;
+        if (sysinfo(&si) == 0) {
+            unsigned long used = (si.totalram - si.freeram) * si.mem_unit;
+            return static_cast<double>(used) / (1024 * 1024);
+        }
+        return 0.0;
+#endif
+    }
+    
+    double getGpuUsage() {
+        // GPU 사용률은 현재 시뮬레이션 (실제 구현은 GPU API 필요)
+        // NVIDIA GPU: NVML 라이브러리 사용
+        // AMD GPU: ADL 라이브러리 사용
+        // Intel GPU: Intel Graphics API 사용
+        
+        // 랜덤 시드 초기화
+        if (!rand_initialized_) {
+            srand(static_cast<unsigned int>(time(nullptr)));
+            rand_initialized_ = true;
+        }
+        
+        // 임시로 CPU 사용률의 일부로 시뮬레이션
+        double cpu_usage = getCpuUsage();
+        return cpu_usage * 0.7 + (rand() % 20); // CPU의 70% + 랜덤 노이즈
+    }
+    
     double getDiskUsage() {
 #ifdef _WIN32
         ULARGE_INTEGER freeBytesAvailable, totalBytes, totalFreeBytes;
@@ -109,6 +147,9 @@ private:
     PDH_HQUERY cpu_query_{nullptr};
     PDH_HCOUNTER cpu_counter_{nullptr};
     ULONGLONG total_memory_{0};
+    
+    // 랜덤 시드 초기화
+    bool rand_initialized_{false};
     
     double getCpuUsageLinux() {
         // Linux CPU 사용률 계산 (간단한 구현)

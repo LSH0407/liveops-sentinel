@@ -10,15 +10,15 @@ from pathlib import Path
 from typing import Dict, List
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                                QProgressBar, QPushButton, QTextEdit, QGroupBox)
-from PySide6.QtCore import Qt, QTimer, QThread, pyqtSignal
+from PySide6.QtCore import Qt, QTimer, QThread, Signal
 from PySide6.QtGui import QFont
 
 class DiagnosticWorker(QThread):
     """진단 작업을 백그라운드에서 실행하는 워커 스레드"""
     
-    progress_updated = pyqtSignal(int)  # 진행률 (0-100)
-    metrics_collected = pyqtSignal(dict)  # 수집된 메트릭
-    diagnostic_completed = pyqtSignal(dict)  # 진단 완료
+    progress_updated = Signal(int)  # 진행률 (0-100)
+    metrics_collected = Signal(dict)  # 수집된 메트릭
+    diagnostic_completed = Signal(dict)  # 진단 완료
     
     def __init__(self, duration_seconds: int, platform: str, metric_bus):
         super().__init__()

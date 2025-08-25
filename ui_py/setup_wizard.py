@@ -38,6 +38,11 @@ class SetupWizard(QtWidgets.QDialog):
         form = QtWidgets.QFormLayout()
         form.addRow("Discord Webhook (선택사항)", self.webhook)
         
+        # Discord 설명 추가
+        discord_info = QtWidgets.QLabel("💡 Discord 알림은 선택사항입니다. 비워두고 진행해도 됩니다.")
+        discord_info.setStyleSheet("color: #cccccc; font-size: 11px;")
+        form.addRow("", discord_info)
+        
         # 백엔드 실행 파일 섹션
         backend_label = QtWidgets.QLabel("백엔드 실행 파일")
         backend_label.setToolTip("LiveOps Sentinel 백엔드 프로그램 위치")

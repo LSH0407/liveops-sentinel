@@ -22,12 +22,20 @@ set(SOURCES
     src/net/Probe.cpp
 )
 
+# vcpkg 패키지 찾기
+find_package(nlohmann_json CONFIG REQUIRED)
+
 # 실행 파일 생성
 add_executable(liveops_backend ${SOURCES})
 
 # 헤더 파일 경로
 target_include_directories(liveops_backend PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+# 라이브러리 링크
+target_link_libraries(liveops_backend PRIVATE
+    nlohmann_json::nlohmann_json
 )
 
 # Windows 특정 설정
