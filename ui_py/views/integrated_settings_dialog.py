@@ -1,9 +1,10 @@
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                                QLineEdit, QPushButton, QGroupBox, QFormLayout,
                                QSpinBox, QDoubleSpinBox, QFileDialog, QTabWidget,
-                               QWidget)
+                               QWidget, QCheckBox, QMessageBox)
 from PySide6.QtCore import Qt
 from pathlib import Path
+from core.obs_client import ObsClient
 
 class IntegratedSettingsDialog(QDialog):
     """통합 설정 다이얼로그"""
@@ -136,20 +137,31 @@ class IntegratedSettingsDialog(QDialog):
         obs_layout = QFormLayout(obs_group)
         
         # 서버 IP
-        self.obs_host_edit = QLineEdit(self.config.get("obs_host", "localhost"))
-        self.obs_host_edit.setPlaceholderText("localhost")
+        obs_config = self.config.get("obs", {})
+        self.obs_host_edit = QLineEdit(obs_config.get("host", "127.0.0.1"))
+        self.obs_host_edit.setPlaceholderText("127.0.0.1")
         obs_layout.addRow("서버 IP:", self.obs_host_edit)
         
         # 서버 포트
-        self.obs_port_edit = QLineEdit(str(self.config.get("obs_port", 4455)))
+        self.obs_port_edit = QLineEdit(str(obs_config.get("port", 4455)))
         self.obs_port_edit.setPlaceholderText("4455")
         obs_layout.addRow("서버 포트:", self.obs_port_edit)
         
         # 비밀번호
-        self.obs_password_edit = QLineEdit(self.config.get("obs_password", ""))
+        self.obs_password_edit = QLineEdit(obs_config.get("password", ""))
         self.obs_password_edit.setPlaceholderText("비밀번호가 설정된 경우에만 입력")
         self.obs_password_edit.setEchoMode(QLineEdit.Password)
         obs_layout.addRow("비밀번호:", self.obs_password_edit)
+        
+        # TLS 체크박스
+        self.obs_tls_checkbox = QCheckBox("TLS 사용")
+        self.obs_tls_checkbox.setChecked(obs_config.get("use_tls", False))
+        obs_layout.addRow("TLS 사용:", self.obs_tls_checkbox)
+        
+        # 연결 테스트 버튼
+        self.obs_test_button = QPushButton("OBS 연결 테스트")
+        self.obs_test_button.clicked.connect(self._test_obs_connection)
+        obs_layout.addRow("", self.obs_test_button)
         
         layout.addWidget(obs_group)
         
@@ -159,7 +171,7 @@ class IntegratedSettingsDialog(QDialog):
         1. OBS Studio 실행
         2. 도구 → WebSocket Server Settings
         3. Enable WebSocket server 체크
-        4. 위의 설정과 일치하도록 포트/비밀번호 설정
+        4. 위의 설정과 일치하도록 포트/비밀번호/TLS 설정
         """)
         info_label.setWordWrap(True)
         info_label.setStyleSheet("color: #cccccc; font-size: 11px;")
@@ -255,12 +267,33 @@ class IntegratedSettingsDialog(QDialog):
         return {
             'backend_path': self.backend_path_edit.text().strip(),
             'webhook': self.discord_webhook_edit.text().strip(),
-            'obs_host': self.obs_host_edit.text().strip() or "localhost",
-            'obs_port': int(self.obs_port_edit.text().strip() or "4455"),
-            'obs_password': self.obs_password_edit.text().strip(),
+            'obs': {
+                'host': self.obs_host_edit.text().strip() or "127.0.0.1",
+                'port': int(self.obs_port_edit.text().strip() or "4455"),
+                'use_tls': self.obs_tls_checkbox.isChecked(),
+                'password': self.obs_password_edit.text().strip()
+            },
             'thresholds': {
                 'rttMs': self.response_time.value(),
                 'lossPct': self.packet_loss.value(),
                 'holdSec': self.alert_delay.value()
             }
         }
+
+    def _test_obs_connection(self):
+        """OBS 연결 테스트"""
+        host = self.obs_host_edit.text().strip() or "127.0.0.1"
+        port = int(self.obs_port_edit.text().strip() or "4455")
+        password = self.obs_password_edit.text().strip()
+        use_tls = self.obs_tls_checkbox.isChecked()
+
+        try:
+            obs_client = ObsClient(host, port, password, use_tls)
+            success, message = obs_client.test_connect()
+            
+            if success:
+                QMessageBox.information(self, "OBS 연결 테스트", f"✅ {message}")
+            else:
+                QMessageBox.critical(self, "OBS 연결 실패", f"❌ {message}")
+        except Exception as e:
+            QMessageBox.critical(self, "OBS 연결 오류", f"연결 테스트 중 오류 발생: {e}")

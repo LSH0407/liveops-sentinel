@@ -27,11 +27,13 @@ class DashboardView(QWidget):
         self.monitoring_active = False  # 모니터링 활성화 상태
         
         # OBS 클라이언트 초기화 (시그널 방식)
-        obs_host = self.config.get("obs_host", "localhost")
-        obs_port = self.config.get("obs_port", 4455)
-        obs_password = self.config.get("obs_password", "")
+        obs_config = self.config.get("obs", {})
+        obs_host = obs_config.get("host", "127.0.0.1")
+        obs_port = obs_config.get("port", 4455)
+        obs_password = obs_config.get("password", "")
+        obs_use_tls = obs_config.get("use_tls", False)
         
-        self.obs_client = ObsClient(host=obs_host, port=obs_port, password=obs_password)
+        self.obs_client = ObsClient(host=obs_host, port=obs_port, password=obs_password, use_tls=obs_use_tls)
         self.obs_client.obs_connected.connect(self._on_obs_connected)
         self.obs_client.obs_disconnected.connect(self._on_obs_disconnected)
         self.obs_client.obs_metrics_updated.connect(self._on_obs_metrics_updated)
@@ -822,10 +824,12 @@ class DashboardView(QWidget):
                 # OBS 클라이언트 재설정
                 if hasattr(self.metric_bus, 'reconfigure_obs_client'):
                     print("메트릭 버스를 통해 OBS 클라이언트 재설정")
+                    obs_config = new_settings.get('obs', {})
                     self.metric_bus.reconfigure_obs_client(
-                        host=new_settings.get('obs_host', 'localhost'),
-                        port=new_settings.get('obs_port', 4455),
-                        password=new_settings.get('obs_password', '')
+                        host=obs_config.get('host', '127.0.0.1'),
+                        port=obs_config.get('port', 4455),
+                        password=obs_config.get('password', ''),
+                        use_tls=obs_config.get('use_tls', False)
                     )
                 else:
                     print("메트릭 버스에 reconfigure_obs_client 메서드 없음")
@@ -835,10 +839,12 @@ class DashboardView(QWidget):
                     
                     # 새로운 설정으로 OBS 클라이언트 재생성
                     from core.obs_client import ObsClient
+                    obs_config = new_settings.get('obs', {})
                     self.obs_client = ObsClient(
-                        host=new_settings.get('obs_host', 'localhost'),
-                        port=new_settings.get('obs_port', 4455),
-                        password=new_settings.get('obs_password', '')
+                        host=obs_config.get('host', '127.0.0.1'),
+                        port=obs_config.get('port', 4455),
+                        password=obs_config.get('password', ''),
+                        use_tls=obs_config.get('use_tls', False)
                     )
                     self.obs_client.obs_connected.connect(self._on_obs_connected)
                     self.obs_client.obs_disconnected.connect(self._on_obs_disconnected)

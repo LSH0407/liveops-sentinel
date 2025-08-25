@@ -306,10 +306,10 @@ class MetricBus(QObject):
         
         print(f"=== 메트릭 버스 OBS 업데이트 끝 ===")
     
-    def reconfigure_obs_client(self, host: str, port: int, password: str = ""):
+    def reconfigure_obs_client(self, host: str, port: int, password: str = "", use_tls: bool = False):
         """OBS 클라이언트 재설정"""
         print(f"=== OBS 클라이언트 재설정 ===")
-        print(f"새 설정: host={host}, port={port}, password={'*' * len(password) if password else '없음'}")
+        print(f"새 설정: host={host}, port={port}, password={'*' * len(password) if password else '없음'}, tls={use_tls}")
         
         try:
             # 기존 OBS 클라이언트 중지
@@ -318,7 +318,7 @@ class MetricBus(QObject):
                 self.obs_client.stop()
             
             # 새로운 설정으로 OBS 클라이언트 생성
-            self.obs_client = ObsClient(host=host, port=port, password=password)
+            self.obs_client = ObsClient(host=host, port=port, password=password, use_tls=use_tls)
             self.obs_client.obs_metrics_updated.connect(self._on_obs_metrics_updated)
             self.obs_client.set_metrics_callback(self._on_obs_metrics_updated)
             

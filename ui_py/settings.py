@@ -15,9 +15,12 @@ DEFAULTS = {
     "simpleMode": False,
     "theme": "dark",
     "current_bitrate_kbps": 6000,
-    "obs_host": "localhost",
-    "obs_port": 4455,
-    "obs_password": ""
+    "obs": {
+        "host": "127.0.0.1",
+        "port": 4455,
+        "use_tls": False,
+        "password": ""
+    }
 }
 
 def setup_logging():
@@ -57,6 +60,10 @@ def load() -> dict:
 
 def save(cfg: dict):
     try:
+        # OBS 비밀번호 공백 제거
+        if "obs" in cfg and "password" in cfg["obs"]:
+            cfg["obs"]["password"] = cfg["obs"]["password"].strip()
+        
         APP_DIR.mkdir(parents=True, exist_ok=True)
         CFG_PATH.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
         logging.info("설정 저장 완료")

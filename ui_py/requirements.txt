@@ -1,4 +1,4 @@
 PySide6
 pydantic>=2
-websockets>=10.0
+obsws-python>=1.6.0
 pyinstaller>=5.0
