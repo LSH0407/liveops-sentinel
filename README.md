@@ -1,242 +1,367 @@
-# LiveOps Sentinel
+# LiveOps Sentinel 🚀
 
-**기본 모니터링 에디션 - 실시간 스트리밍 환경 진단 도구**
+**실시간 스트리밍 품질 모니터링 및 최적화 솔루션**
 
-[![Build Status](https://github.com/your-username/liveops-sentinel/workflows/Build/badge.svg)](https://github.com/your-username/liveops-sentinel/actions)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.1.0-green.svg)](https://github.com/your-username/liveops-sentinel/releases)
+[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
+[![Qt](https://img.shields.io/badge/Qt-PySide6-green.svg)](https://doc.qt.io/qtforpython/)
+[![C++](https://img.shields.io/badge/C++-17-red.svg)](https://isocpp.org/)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-## 📋 개요
+## 📋 목차
 
-LiveOps Sentinel은 스트리머를 위한 실시간 모니터링 및 진단 도구입니다. 네트워크 상태, 시스템 성능을 실시간으로 추적하고, 플랫폼별 최적 설정을 권장하여 안정적인 스트리밍 환경을 제공합니다.
+- [개요](#개요)
+- [주요 기능](#주요-기능)
+- [모니터링 요소](#모니터링-요소)
+- [시스템 요구사항](#시스템-요구사항)
+- [설치 및 실행](#설치-및-실행)
+- [사용법](#사용법)
+- [설정](#설정)
+- [품질 점수 계산](#품질-점수-계산)
+- [문제 해결](#문제-해결)
+- [개발 참여](#개발-참여)
+- [라이선스](#라이선스)
+
+## 🎯 개요
+
+LiveOps Sentinel은 실시간 스트리밍 환경에서 네트워크, 시스템, OBS 성능을 종합적으로 모니터링하고 최적화하는 전문 도구입니다. 9개의 핵심 지표를 실시간으로 분석하여 스트리밍 품질을 점수화하고 구체적인 개선 방안을 제시합니다.
+
+### 🏗️ 아키텍처
+
+- **GUI (Python/PySide6)**: 현대적인 다크 테마 UI, 실시간 그래프, 설정 관리
+- **백엔드 (C++17)**: 고성능 메트릭 수집 및 분석 엔진
+- **OBS 연동**: WebSocket v5 프로토콜을 통한 실시간 OBS 메트릭 수집
+- **알림 시스템**: Discord 웹후크, 스트림 끊김 감지, 품질 저하 알림
 
 ## ✨ 주요 기능
 
-### 🔍 실시간 모니터링
-- **네트워크 메트릭**: 응답 시간(RTT), 패킷 손실률, 업로드 대역폭
-- **시스템 메트릭**: CPU, 메모리 사용률
-- **사용자 친화적 UI**: 직관적인 용어와 시각적 표시
+### 🔍 **실시간 모니터링**
+- **9개 핵심 지표** 실시간 추적
+- **연속 그래프** 표시 (60초 히스토리)
+- **품질 점수** 자동 계산 (0-100점)
+- **상황별 권장사항** 제공
 
-### 🎯 플랫폼별 최적화
-- **지원 플랫폼**: SOOP(숲), CHZZK(치지직), YouTube, Twitch, 아프리카TV
-- **자동 권장 설정**: 네트워크 상태에 따른 해상도/비트레이트/FPS 추천
-- **상한 경고**: 플랫폼별 제한 초과 시 자동 하향 조정 제안
+### 📊 **진단 및 벤치마크**
+- **진단 모드**: 30초~180분 설정 가능
+- **시스템 분석**: 최적 설정 자동 제안
+- **진행률 표시**: 실시간 진행 상황
+- **결과 리포트**: 상세 분석 결과
 
-### 📊 진단 모드
-- **지정 시간 진단**: 15/30/60/120분 또는 사용자 지정
-- **실시간 진행 표시**: 진행바와 남은 시간 표시
-- **상세 리포트**: HTML, JSON, CSV 형식으로 결과 저장
+### 🎮 **OBS Studio 연동**
+- **WebSocket v5** 프로토콜 지원
+- **실시간 메트릭**: Dropped frames, Encoding/Render lag
+- **연결 테스트**: 원클릭 연결 확인
+- **자동 재연결**: 연결 끊김 시 자동 복구
 
-### 🎨 직관적 인터페이스
-- **다크 테마**: 눈의 피로도 감소
-- **간단/전문 모드**: 사용자 수준에 맞는 정보 표시
-- **실시간 그래프**: 60초 롤링 윈도우로 트렌드 파악
+### 🚨 **알림 시스템**
+- **스트림 끊김 감지**: 시청자 경험 영향 분석
+- **품질 저하 알림**: 실시간 경고 시스템
+- **Discord 연동**: 웹후크를 통한 원격 알림
+- **복구 알림**: 정상 상태 복구 시 알림
 
-## 🏗️ 아키텍처
+### 🎨 **현대적 UI/UX**
+- **다크 테마**: 전문가급 디자인
+- **반응형 레이아웃**: 창 크기 조정 지원
+- **도움말 시스템**: 9개 지표 상세 설명
+- **설정 관리**: 통합 설정 다이얼로그
 
-```
-liveops-sentinel/
-├── src/                    # C++ 백엔드
-│   ├── main.cpp           # 메인 실행 파일
-│   ├── core/              # 핵심 모듈
-│   │   ├── Config.cpp     # 설정 관리
-│   │   └── SystemMetrics.cpp  # 시스템 메트릭
-│   └── net/               # 네트워크 모듈
-│       └── Probe.cpp      # 네트워크 진단
-├── ui_py/                 # Python GUI
-│   ├── main.py           # GUI 메인
-│   ├── views/            # 뷰 컴포넌트
-│   │   └── dashboard.py  # 메인 대시보드
-│   ├── widgets/          # UI 위젯
-│   ├── core/             # 핵심 로직
-│   ├── actions/          # 액션 모듈
-│   │   └── diagnose.py   # 진단 모드
-│   └── platform_rules.py # 플랫폼 규칙
-└── scripts/              # 빌드 스크립트
-```
+## 📈 모니터링 요소
 
-## 🚀 빠른 시작
+### 🌐 **네트워크 지표 (3개)**
+1. **서버 응답 속도 (RTT)**
+   - 측정: ICMP ping을 통한 왕복 시간
+   - 기준: 20ms(좋음) ~ 300ms(불량)
+   - 영향: 스트림 지연, 버퍼링
 
-### 요구사항
+2. **전송 손실률 (Packet Loss)**
+   - 측정: UDP 패킷 손실률 분석
+   - 기준: 0%(좋음) ~ 5%(불량)
+   - 영향: 화질 저하, 끊김 현상
 
-- **Windows 10/11** (x64)
-- **Visual Studio 2022** 또는 **Build Tools**
-- **Python 3.8+** (GUI용)
-- **CMake 3.22+**
+3. **업로드 여유율 (Uplink Headroom)**
+   - 측정: 현재 비트레이트 대비 여유 대역폭
+   - 기준: 50% 이상(좋음) ~ 0% 이하(불량)
+   - 영향: 비트레이트 적응성
 
-### 설치 및 실행
+### 💻 **시스템 지표 (2개)**
+4. **CPU 사용률**
+   - 측정: 전체 CPU 사용률 모니터링
+   - 기준: 60% 이하(좋음) ~ 90% 이상(불량)
+   - 영향: 인코딩 성능, 시스템 안정성
 
-1. **저장소 클론**
+5. **GPU 사용률**
+   - 측정: 그래픽 카드 사용률 추적
+   - 기준: 70% 이하(좋음) ~ 95% 이상(불량)
+   - 영향: 렌더링 성능, 화질
+
+### 📹 **OBS 지표 (4개)**
+6. **버린 프레임 비율 (Dropped Frames)**
+   - 측정: OBS WebSocket을 통한 실시간 수집
+   - 기준: 1% 이하(좋음) ~ 5% 이상(불량)
+   - 영향: 시청자 화질, 끊김 현상
+
+7. **인코딩 지연 (Encoding Lag)**
+   - 측정: 인코더 처리 시간 분석
+   - 기준: 5ms 이하(좋음) ~ 20ms 이상(불량)
+   - 영향: 실시간성, 동기화
+
+8. **렌더 지연 (Render Lag)**
+   - 측정: GPU 렌더링 시간 추적
+   - 기준: 7ms 이하(좋음) ~ 25ms 이상(불량)
+   - 영향: 화면 지연, 성능
+
+9. **스트림 상태 (Stream Status)**
+   - 측정: OBS 스트리밍 상태 모니터링
+   - 기준: 정상 스트리밍(좋음) ~ 끊김(불량)
+   - 영향: 전체 스트리밍 안정성
+
+## 💻 시스템 요구사항
+
+### 최소 요구사항
+- **OS**: Windows 10/11 (64-bit)
+- **CPU**: Intel i3-6100 / AMD Ryzen 3 1200 이상
+- **RAM**: 4GB 이상
+- **GPU**: DirectX 11 지원 그래픽 카드
+- **네트워크**: 10Mbps 업로드 이상
+
+### 권장 사양
+- **OS**: Windows 11 (64-bit)
+- **CPU**: Intel i5-8400 / AMD Ryzen 5 2600 이상
+- **RAM**: 8GB 이상
+- **GPU**: NVIDIA GTX 1060 / AMD RX 580 이상
+- **네트워크**: 50Mbps 업로드 이상
+
+### 소프트웨어 요구사항
+- **Python**: 3.8 이상
+- **OBS Studio**: 28.0 이상 (WebSocket Server 활성화 필요)
+- **Visual Studio**: 2019 이상 (C++ 백엔드 빌드용)
+
+## 🚀 설치 및 실행
+
+### 1. 저장소 클론
 ```bash
-git clone https://github.com/your-username/liveops-sentinel.git
+git clone https://github.com/LSH0407/liveops-sentinel.git
 cd liveops-sentinel
 ```
 
-2. **C++ 백엔드 빌드**
+### 2. Python 환경 설정
 ```bash
-# vcpkg 설정 (필요시)
-git clone https://github.com/Microsoft/vcpkg.git C:\vcpkg
-C:\vcpkg\bootstrap-vcpkg.bat
+# 가상환경 생성 및 활성화
+python -m venv .venv
+.venv\Scripts\activate  # Windows
+source .venv/bin/activate  # Linux/Mac
 
-# 빌드
-cmake -B build -S . -G "Visual Studio 17 2022" -A x64
-cmake --build build --config Release --parallel
+# 의존성 설치
+pip install -r requirements.txt
 ```
 
-3. **Python GUI 실행**
+### 3. C++ 백엔드 빌드
+```bash
+# 빌드 디렉토리 생성
+mkdir build_backend
+cd build_backend
+
+# CMake 설정
+cmake .. -DCMAKE_TOOLCHAIN_FILE=[vcpkg_root]/scripts/buildsystems/vcpkg.cmake
+
+# 빌드 실행
+cmake --build . --config Release
+```
+
+### 4. 실행
 ```bash
 cd ui_py
-python -m pip install -r requirements.txt
 python main.py
 ```
 
-### 첫 실행 설정
+## 📖 사용법
 
-1. **백엔드 실행 파일 경로**: 자동으로 찾거나 수동 지정
-2. **경고 임계값 설정**:
-   - 응답시간: 100ms (낮을수록 좋음)
-   - 손실률: 2.0% (0%에 가까울수록 좋음)
-   - 지연시간: 10초 (문제 지속 시 알림)
+### 🎯 기본 사용법
 
-## 📊 사용법
+1. **프로그램 실행**
+   - `ui_py/main.py` 실행
+   - 초기 설정 마법사 진행
 
-### 실시간 모니터링
+2. **백엔드 설정**
+   - 설정 → 백엔드 탭
+   - `build_backend/Release/liveops_backend.exe` 경로 지정
 
-1. **GUI 실행**: `python main.py`
-2. **플랫폼 선택**: 드롭다운에서 스트리밍 플랫폼 선택
-3. **모니터링 시작**: 자동으로 메트릭 수집 및 표시
-4. **권장 설정 확인**: 하단에 플랫폼별 최적 설정 표시
+3. **OBS 연동 설정**
+   - OBS Studio에서 WebSocket Server 활성화
+   - 설정 → OBS 연동 탭에서 연결 정보 입력
+   - "OBS 연결 테스트" 버튼으로 확인
 
-### 진단 모드
+4. **모니터링 시작**
+   - "모니터링 시작" 버튼 클릭
+   - 실시간 그래프 및 품질 점수 확인
 
-1. **진단 시작**: 상단 "진단 모드" 버튼 클릭
-2. **진행 상황 확인**: 진행바와 실시간 메트릭 표시
-3. **리포트 생성**: 완료 후 HTML/JSON/CSV 형식으로 저장
-4. **결과 분석**: Documents/LiveOpsReports 폴더에서 확인
+### 🔧 고급 기능
 
-### 플랫폼별 권장 설정
+#### 진단 모드
+- **진행**: "진단 모드" 버튼 클릭
+- **시간 설정**: 30초~180분 선택 가능
+- **결과**: 시스템 최적화 권장사항 제공
 
-| 플랫폼 | 최대 비트레이트 | 키프레임 | 권장 인코더 |
-|--------|----------------|----------|-------------|
-| SOOP | 8,000 kbps | 1초 | NVENC/QSV |
-| CHZZK | 8,000 kbps | 1초 | NVENC/QSV |
-| YouTube | 15,000 kbps | 2초 | NVENC/QSV |
-| Twitch | 6,000 kbps | 2초 | NVENC/QSV |
-| 아프리카TV | 4,000 kbps | 1초 | x264/NVENC |
+#### 알림 설정
+- **Discord**: 웹후크 URL 설정
+- **임계값**: 경고 기준값 조정
+- **자동 알림**: 스트림 끊김 시 자동 알림
+
+#### 도움말 시스템
+- **❓ 버튼**: 9개 지표 상세 설명
+- **측정 방법**: 각 지표의 계산 방식
+- **권장사항**: 상황별 개선 방안
 
 ## ⚙️ 설정
 
-### 백엔드 설정 (`config.txt`)
+### 백엔드 설정
+- **실행 파일 경로**: `liveops_backend.exe` 위치
+- **자동 시작**: 프로그램 실행 시 백엔드 자동 시작
 
-```
-# 네트워크 설정
-net.probe_host=8.8.8.8
-net.interval_ms=1000
+### 알림 설정
+- **Discord Webhook**: 알림 전송 URL
+- **임계값 조정**: RTT, 손실률, 지연시간 기준
 
-# UI 설정
-ui.theme=dark
-ui.simpleMode=true
+### OBS 연동 설정
+- **서버 IP**: 기본값 `127.0.0.1`
+- **포트**: 기본값 `4455`
+- **비밀번호**: OBS WebSocket 설정과 일치
+- **TLS**: 보안 연결 사용 여부
 
-# 플랫폼 설정
-platform=soop
-diag_minutes=60
-webhook=
+### 진단 설정
+- **진단 시간**: 30초, 60초, 3분, 10분, 30분, 60분, 120분, 180분
+- **분석 범위**: 시스템 전체 성능 분석
 
-# 로깅 설정
-logging.level=info
-logging.file_enabled=true
-logging.console_enabled=true
-```
+## 📊 품질 점수 계산
 
-### GUI 설정 (`ui_py/settings.json`)
+### 점수 구성 (100점 만점)
+- **네트워크 점수 (40%)**: RTT, 손실률, 업로드 여유율
+- **시스템 점수 (30%)**: CPU, GPU 사용률
+- **OBS 점수 (30%)**: Dropped frames, Encoding/Render lag
 
-```json
-{
-  "backend_path": "C:\\Projects\\liveops-sentinel\\build\\Release\\liveops_backend.exe",
-  "webhook": "",
-  "thresholds": {
-    "rttMs": 100,
-    "lossPct": 2.0,
-    "holdSec": 10
-  }
-}
-```
+### 등급 기준
+- **좋음 (85-100점)**: 최적 상태, 지속 모니터링
+- **주의 (60-84점)**: 개선 필요, 권장사항 확인
+- **불안정 (0-59점)**: 즉시 조치 필요
 
-## 📈 성능 지표
-
-### 모니터링 정확도
-- **응답시간 측정**: ±5ms 정확도
-- **패킷 손실 감지**: 0.1% 단위 측정
-- **대역폭 측정**: 실시간 업로드 속도 추적
-
-### 시스템 요구사항
-- **CPU**: 최소 1%, 평균 2-3%
-- **메모리**: 약 50MB (백엔드 + GUI)
-- **네트워크**: 1Hz 메트릭 수집
+### 권장사항 시스템
+- **네트워크 문제**: 비트레이트 조정, 유선 전환
+- **OBS 성능**: 해상도 낮추기, 인코더 변경
+- **시스템 부하**: HW 인코더 사용, 설정 최적화
 
 ## 🔧 문제 해결
 
 ### 일반적인 문제
 
-**Q: 백엔드 실행 파일을 찾을 수 없습니다**
-A: 설정 마법사에서 수동으로 경로를 지정하거나, 빌드가 완료되었는지 확인하세요.
+#### 백엔드 연결 실패
+```
+문제: "백엔드 연결 실패" 메시지
+해결: 
+1. build_backend/Release/liveops_backend.exe 존재 확인
+2. 설정에서 경로 재지정
+3. 방화벽 예외 추가
+```
 
-**Q: 네트워크 메트릭이 0으로 표시됩니다**
-A: 관리자 권한으로 실행하거나, 방화벽 설정을 확인하세요.
+#### OBS 연결 실패
+```
+문제: "OBS 연결 테스트" 실패
+해결:
+1. OBS Studio 실행 확인
+2. 도구 → WebSocket Server Settings 활성화
+3. 포트/비밀번호 설정 확인
+4. TLS 설정 일치 확인
+```
 
-**Q: GUI가 실행되지 않습니다**
-A: Python 의존성이 설치되었는지 확인: `pip install -r requirements.txt`
+#### 그래프가 그려지지 않음
+```
+문제: 그래프에 데이터가 표시되지 않음
+해결:
+1. 모니터링 시작 확인
+2. 백엔드 프로세스 실행 상태 확인
+3. 네트워크 연결 상태 확인
+```
 
 ### 성능 최적화
 
-**네트워크 상태가 좋지 않을 때**:
-- 비트레이트를 20% 낮추기
-- 해상도를 한 단계 낮추기 (1080p → 720p)
-- 유선 연결 사용 권장
+#### 높은 CPU 사용률
+- 해상도를 720p로 낮추기
+- HW 인코더(NVENC/QuickSync) 사용
+- 불필요한 OBS 필터 제거
 
-**CPU 사용률이 높을 때**:
-- HW 인코더 사용 (NVENC/QSV)
-- 해상도 또는 FPS 낮추기
-- 다른 프로그램 종료
+#### 네트워크 문제
+- 유선 연결로 전환
+- 공유기 QoS 설정 확인
+- 비트레이트 20% 감소
 
-## 🤝 기여하기
+#### OBS 성능 문제
+- 캡처 소스 동시활성 최소화
+- 필터 수 줄이기
+- NVENC 인코더 사용
 
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+## 🤝 개발 참여
 
-## 📝 라이선스
+### 프로젝트 구조
+```
+liveops-sentinel/
+├── ui_py/                 # Python GUI 애플리케이션
+│   ├── main.py           # 메인 실행 파일
+│   ├── views/            # UI 뷰 컴포넌트
+│   ├── core/             # 핵심 로직
+│   ├── widgets/          # 커스텀 위젯
+│   └── actions/          # 사용자 액션
+├── src/                  # C++ 백엔드 소스
+│   ├── main.cpp          # 메인 실행 파일
+│   ├── core/             # 핵심 기능
+│   ├── net/              # 네트워크 모듈
+│   ├── obs/              # OBS 연동
+│   └── sys/              # 시스템 모니터링
+├── build_backend/        # C++ 빌드 결과물
+├── docs/                 # 문서
+└── scripts/              # 빌드 스크립트
+```
+
+### 개발 환경 설정
+```bash
+# 개발 의존성 설치
+pip install -r requirements-dev.txt
+
+# 코드 포맷팅
+black ui_py/
+isort ui_py/
+
+# 타입 체크
+mypy ui_py/
+
+# 테스트 실행
+pytest tests/
+```
+
+### 기여 가이드라인
+1. **Fork** 저장소
+2. **Feature branch** 생성 (`git checkout -b feature/AmazingFeature`)
+3. **Commit** 변경사항 (`git commit -m 'Add some AmazingFeature'`)
+4. **Push** 브랜치 (`git push origin feature/AmazingFeature`)
+5. **Pull Request** 생성
+
+### 코딩 스타일
+- **Python**: PEP 8 준수, 타입 힌트 사용
+- **C++**: Google C++ Style Guide 준수
+- **UI**: Qt 디자인 가이드라인 준수
+
+## 📄 라이선스
 
 이 프로젝트는 MIT 라이선스 하에 배포됩니다. 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하세요.
 
-## 📞 지원
+## 🙏 감사의 말
 
-- **이슈 리포트**: [GitHub Issues](https://github.com/your-username/liveops-sentinel/issues)
-- **문서**: [Wiki](https://github.com/your-username/liveops-sentinel/wiki)
-- **릴리즈**: [Releases](https://github.com/your-username/liveops-sentinel/releases)
-
-## 🗺️ 로드맵
-
-### 단기 목표 (1-2개월)
-- [x] 기본 모니터링 시스템
-- [x] 플랫폼별 권장 설정
-- [x] 진단 모드 및 리포트
-- [ ] OBS Studio 연동
-- [ ] ZIP 내보내기 기능
-
-### 중기 목표 (3-6개월)
-- [ ] Linux 지원
-- [ ] 고급 분석 기능
-- [ ] 웹 대시보드
-- [ ] 모바일 앱
-
-### 장기 목표 (6개월+)
-- [ ] AI 기반 예측
-- [ ] 분산 모니터링
-- [ ] 클라우드 연동
+- **OBS Studio**: WebSocket API 제공
+- **Qt/PySide6**: 크로스 플랫폼 GUI 프레임워크
+- **vcpkg**: C++ 패키지 관리
+- **커뮤니티**: 버그 리포트 및 기능 제안
 
 ---
 
-**LiveOps Sentinel** - 안정적인 스트리밍을 위한 스마트 모니터링 솔루션 
+**LiveOps Sentinel** - 스트리밍 품질을 한 단계 업그레이드하세요! 🚀
+
+**개발자**: [LSH0407](https://github.com/LSH0407)
+**버전**: 2.0.0
+**최종 업데이트**: 2024년 12월 

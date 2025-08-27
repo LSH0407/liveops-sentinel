@@ -31,73 +31,52 @@ class QualityScore:
             'render_lag_ms': '렌더 지연'
         }
     
-    def compute_quality(self, metrics_window: List[Dict], current_bitrate_kbps: int) -> Dict:
+    def compute_quality(self, metrics_window: List[dict], current_bitrate_kbps: int = 6000, obs_settings: dict = None) -> dict:
         """품질 점수 계산 및 권장사항 생성"""
         if not metrics_window:
-            return self._default_result()
+            return {
+                'score': 0,
+                'grade': 'F',
+                'action': '메트릭 데이터가 없습니다',
+                'details': {}
+            }
         
-        # 최근 5초 평균 계산
-        recent_metrics = self._calculate_recent_averages(metrics_window)
+        # 최근 5개 메트릭 사용 (최대)
+        recent_data = metrics_window[-5:] if len(metrics_window) >= 5 else metrics_window
+        # print(f"품질 점수 계산: 최근 {len(recent_data)}개 메트릭 사용")
         
-        # 각 지표별 점수 계산
-        scores = {}
-        reasons = []
+        # 평균값 계산
+        result = self._calculate_recent_averages(recent_data)
+        # print(f"품질 점수 계산: 평균값 = {result}")
         
-        # RTT 점수
-        rtt_score = self._normalize_rtt(recent_metrics.get('rtt_ms', 0))
-        scores['rtt_ms'] = rtt_score
-        if rtt_score < 60:
-            reasons.append(f"서버 응답 속도 높음 ({recent_metrics.get('rtt_ms', 0):.1f}ms)")
+        # 네트워크 점수 (40%)
+        network_score = self._calculate_network_score(result, current_bitrate_kbps)
+        # print(f"품질 점수 계산 상세: RTT={result.get('rtt_ms', 0)}, Loss={result.get('loss_pct', 0)}, Uplink={current_bitrate_kbps}")
+        # print(f"품질 점수 계산 상세: CPU={result.get('cpu_pct', 0)}, GPU={result.get('gpu_pct', 0)}")
+        # print(f"품질 점수 계산 상세: Dropped={result.get('dropped_ratio', 0)}, EncLag={result.get('enc_lag_ms', 0)}")
         
-        # Loss 점수
-        loss_score = self._normalize_loss(recent_metrics.get('loss_pct', 0))
-        scores['loss_pct'] = loss_score
-        if loss_score < 60:
-            reasons.append(f"전송 손실 높음 ({recent_metrics.get('loss_pct', 0):.2f}%)")
+        # 시스템 점수 (30%)
+        system_score = self._calculate_system_score(result)
         
-        # Uplink headroom 점수
-        uplink_kbps = recent_metrics.get('uplink_kbps', 0)
-        headroom_score = self._normalize_uplink_headroom(uplink_kbps, current_bitrate_kbps)
-        scores['uplink_headroom'] = headroom_score
-        if headroom_score < 60:
-            headroom_pct = max(0, (uplink_kbps - current_bitrate_kbps) / current_bitrate_kbps * 100)
-            reasons.append(f"업로드 대역폭 부족 (여유율 {headroom_pct:.1f}%)")
+        # OBS 점수 (30%)
+        obs_score = self._calculate_obs_score(result)
         
-        print(f"품질 점수 계산 상세: RTT={recent_metrics.get('rtt_ms', 0)}, Loss={recent_metrics.get('loss_pct', 0)}, Uplink={uplink_kbps}")
-        print(f"품질 점수 계산 상세: CPU={recent_metrics.get('cpu_pct', 0)}, GPU={recent_metrics.get('gpu_pct', 0)}")
-        print(f"품질 점수 계산 상세: Dropped={recent_metrics.get('dropped_ratio', 0)}, EncLag={recent_metrics.get('enc_lag_ms', 0)}")
+        # 최종 점수 계산
+        final_score = (network_score * 0.4) + (system_score * 0.3) + (obs_score * 0.3)
         
-        # OBS 점수들
-        dropped_score = self._normalize_dropped_ratio(recent_metrics.get('dropped_ratio', 0))
-        scores['dropped_ratio'] = dropped_score
-        if dropped_score < 60:
-            reasons.append(f"버린 프레임 비율 높음 ({recent_metrics.get('dropped_ratio', 0)*100:.1f}%)")
-        
-        enc_lag_score = self._normalize_enc_lag(recent_metrics.get('enc_lag_ms', 0))
-        scores['enc_lag_ms'] = enc_lag_score
-        if enc_lag_score < 60:
-            reasons.append(f"인코딩 지연 높음 ({recent_metrics.get('enc_lag_ms', 0):.1f}ms)")
-        
-        render_lag_score = self._normalize_render_lag(recent_metrics.get('render_lag_ms', 0))
-        scores['render_lag_ms'] = render_lag_score
-        if render_lag_score < 60:
-            reasons.append(f"렌더 지연 높음 ({recent_metrics.get('render_lag_ms', 0):.1f}ms)")
-        
-        # 가중 평균 점수 계산
-        total_score = sum(scores[key] * self.weights[key] for key in scores)
-        
-        # 상태 등급 결정
-        grade = self._determine_grade(total_score)
-        
-        # 권장 조치 생성
-        action = self._generate_action(recent_metrics, total_score, current_bitrate_kbps)
+        # 등급 및 권장사항 결정
+        grade, action = self._get_grade_and_action(final_score, result, current_bitrate_kbps, obs_settings)
         
         return {
-            'score': round(total_score, 1),
+            'score': round(final_score, 1),
             'grade': grade,
-            'reasons': reasons,
             'action': action,
-            'details': scores
+            'details': {
+                'network_score': round(network_score, 1),
+                'system_score': round(system_score, 1),
+                'obs_score': round(obs_score, 1),
+                'avg_metrics': result
+            }
         }
     
     def _calculate_recent_averages(self, metrics_window: List[Dict]) -> Dict[str, float]:
@@ -115,7 +94,7 @@ class QualityScore:
         metric_counts = {}
         
         for metric in recent_data:
-            print(f"처리 중인 메트릭: {metric}")
+            # print(f"처리 중인 메트릭: {metric}")
             for key, value in metric.items():
                 if isinstance(value, (int, float)):  # 숫자만 처리
                     if key not in metric_sums:
@@ -131,6 +110,46 @@ class QualityScore:
         
         print(f"품질 점수 계산: 평균값 = {result}")
         return result
+    
+    def _calculate_network_score(self, metrics: dict, current_bitrate_kbps: int) -> float:
+        """네트워크 점수 계산 (40%)"""
+        rtt_score = self._normalize_rtt(metrics.get('rtt_ms', 0))
+        loss_score = self._normalize_loss(metrics.get('loss_pct', 0))
+        uplink_score = self._normalize_uplink_headroom(metrics.get('uplink_kbps', 0), current_bitrate_kbps)
+        
+        # 가중 평균 (RTT 50%, Loss 30%, Uplink 20%)
+        return (rtt_score * 0.5) + (loss_score * 0.3) + (uplink_score * 0.2)
+    
+    def _calculate_system_score(self, metrics: dict) -> float:
+        """시스템 점수 계산 (30%)"""
+        cpu_score = max(0, 100 - metrics.get('cpu_pct', 0))  # CPU 사용률이 낮을수록 좋음
+        gpu_score = max(0, 100 - metrics.get('gpu_pct', 0))  # GPU 사용률이 낮을수록 좋음
+        
+        # CPU 60%, GPU 40%
+        return (cpu_score * 0.6) + (gpu_score * 0.4)
+    
+    def _calculate_obs_score(self, metrics: dict) -> float:
+        """OBS 점수 계산 (30%)"""
+        dropped_score = self._normalize_dropped_ratio(metrics.get('dropped_ratio', 0))
+        enc_lag_score = self._normalize_enc_lag(metrics.get('enc_lag_ms', 0))
+        render_lag_score = self._normalize_render_lag(metrics.get('render_lag_ms', 0))
+        
+        # 가중 평균 (Dropped 50%, Enc Lag 25%, Render Lag 25%)
+        return (dropped_score * 0.5) + (enc_lag_score * 0.25) + (render_lag_score * 0.25)
+    
+    def _get_grade_and_action(self, score: float, metrics: dict, current_bitrate_kbps: int, obs_settings: dict = None) -> tuple:
+        """등급과 권장사항 결정"""
+        if score >= 85:
+            grade = "좋음"
+        elif score >= 60:
+            grade = "주의"
+        else:
+            grade = "불안정"
+        
+        # 개선된 권장사항 생성 메서드 사용
+        action = self._generate_action(metrics, score, current_bitrate_kbps)
+        
+        return grade, action
     
     def _normalize_rtt(self, rtt_ms: float) -> float:
         """RTT 정규화 (20ms=100, 80ms=60, 150ms=30, 300ms=0)"""
@@ -213,10 +232,10 @@ class QualityScore:
         else:
             return "불안정"
     
-    def _generate_action(self, metrics: Dict, score: float, current_bitrate_kbps: int) -> str:
+    def _generate_action(self, metrics: Dict, score: float, current_bitrate_kbps: int, obs_settings: dict = None) -> str:
         """권장 조치 생성"""
         if score >= 85:
-            return "현재 설정이 최적입니다."
+            return "현재 설정이 최적입니다. 지속적으로 모니터링하세요."
         
         actions = []
         
@@ -224,26 +243,52 @@ class QualityScore:
         loss_pct = metrics.get('loss_pct', 0)
         if loss_pct > 2:
             reduction = int(current_bitrate_kbps * 0.2)
-            actions.append(f"비트레이트를 15~25% 낮추세요(예: {current_bitrate_kbps}→{current_bitrate_kbps - reduction}kbps).")
+            actions.append(f"비트레이트를 20% 낮추세요({current_bitrate_kbps}→{current_bitrate_kbps - reduction}kbps).")
+        elif loss_pct > 0.5:
+            actions.append("네트워크 상태를 모니터링하고 필요시 비트레이트를 조정하세요.")
         
         # RTT 기반 권장
         rtt_ms = metrics.get('rtt_ms', 0)
         if rtt_ms > 100:
-            actions.append("와이파이→유선 전환 권장. 공유기 QoS(업로드 우선순위) 확인.")
+            actions.append("와이파이→유선 전환 권장. 공유기 QoS 설정을 확인하세요.")
+        elif rtt_ms > 80:
+            actions.append("네트워크 연결 상태를 점검하고 필요시 공유기 설정을 확인하세요.")
         
-        # Dropped ratio 기반 권장
+        # Dropped ratio 기반 권장 (OBS 설정 고려)
         dropped_ratio = metrics.get('dropped_ratio', 0)
         if dropped_ratio > 0.03:
-            actions.append("출력 해상도 1080p60→720p60, 또는 인코더 NVENC로 전환.")
+            if obs_settings:
+                current_resolution = obs_settings.get('output_resolution', 'Unknown')
+                current_encoder = obs_settings.get('encoder', 'Unknown')
+                if '1920x1080' in current_resolution:
+                    actions.append(f"현재 해상도({current_resolution})가 높습니다. 720p60으로 낮추세요.")
+                elif 'x264' in current_encoder:
+                    actions.append(f"현재 인코더({current_encoder})가 CPU 부하가 높습니다. NVENC으로 전환하세요.")
+                else:
+                    actions.append("출력 해상도를 720p60으로 낮추거나 NVENC 인코더로 전환하세요.")
+            else:
+                actions.append("출력 해상도를 720p60으로 낮추거나 NVENC 인코더로 전환하세요.")
+        elif dropped_ratio > 0.01:
+            actions.append("OBS 설정을 최적화하고 필요시 해상도를 조정하세요.")
         
         # Enc/Render lag 기반 권장
         enc_lag = metrics.get('enc_lag_ms', 0)
         render_lag = metrics.get('render_lag_ms', 0)
         if enc_lag > 15 or render_lag > 20:
-            actions.append("필요 시 필터/소스 수 줄이기. 캡처 소스 동시활성 최소화.")
+            actions.append("필터나 소스 수를 줄이고 캡처 소스 동시활성을 최소화하세요.")
+        elif enc_lag > 10 or render_lag > 14:
+            actions.append("OBS 성능을 최적화하고 필요시 설정을 조정하세요.")
+        
+        # CPU/GPU 기반 권장
+        cpu_pct = metrics.get('cpu_pct', 0)
+        gpu_pct = metrics.get('gpu_pct', 0)
+        if cpu_pct > 80:
+            actions.append("CPU 사용률이 높습니다. 해상도를 낮추거나 HW 인코더를 사용하세요.")
+        elif gpu_pct > 85:
+            actions.append("GPU 사용률이 높습니다. 그래픽 설정을 최적화하세요.")
         
         if not actions:
-            return "네트워크 상태를 모니터링하고 필요시 설정을 조정하세요."
+            return "현재 상태가 양호합니다. 지속적으로 모니터링하세요."
         
         return " ".join(actions[:2])  # 최대 2개 권장사항만 표시
     

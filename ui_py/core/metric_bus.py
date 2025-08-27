@@ -141,10 +141,10 @@ class MetricBus(QObject):
     
     def _process_metrics(self, data: dict):
         """메트릭 데이터 처리 및 버퍼 저장"""
-        print(f"메트릭 수신: {data}")
+        # print(f"메트릭 수신: {data}")
         
         if 'event' not in data or data['event'] != 'metrics':
-            print(f"메트릭 이벤트가 아님: {data.get('event', 'no_event')}")
+            # print(f"메트릭 이벤트가 아님: {data.get('event', 'no_event')}")
             return
             
         # Extract timestamp (백엔드에서 초 단위로 오므로 그대로 사용)
@@ -154,8 +154,8 @@ class MetricBus(QObject):
         elif isinstance(ts, int) and ts < 1000000000:  # 밀리초 단위인 경우
             ts = ts / 1000.0  # Convert ms to seconds
         
-        print(f"메트릭 처리 중: CPU={data.get('cpu_pct', 0)}, GPU={data.get('gpu_pct', 0)}, RTT={data.get('rtt_ms', 0)}")
-        print(f"타임스탬프: {ts}")
+        # print(f"메트릭 처리 중: CPU={data.get('cpu_pct', 0)}, GPU={data.get('gpu_pct', 0)}, RTT={data.get('rtt_ms', 0)}")
+        # print(f"타임스탬프: {ts}")
         
         # Store in buffers
         self._store_metric('net.rtt_ms', ts, data.get('rtt_ms', 0))
@@ -177,7 +177,7 @@ class MetricBus(QObject):
         self.latest_snapshot = data
         
         # Emit signal for immediate UI update
-        print("new_metrics 시그널 발생")
+        # print("new_metrics 시그널 발생")
         self.new_metrics.emit(data)
         
         # 메트릭 수신 시 연결 상태 업데이트
@@ -232,12 +232,22 @@ class MetricBus(QObject):
         # Create a copy for thread safety
         snapshot = dict(self.latest_snapshot)
         
-        # Notify all subscribers
+        # print(f"=== 메트릭 브로드캐스트 ===")
+        # print(f"스냅샷: {snapshot}")
+        
+        # Emit signal for UI components
+        self.new_metrics.emit(snapshot)
+        # print("new_metrics 시그널 emit됨")
+        
+        # Notify all subscribers (legacy support)
         for callback in self.subscribers:
             try:
                 callback(snapshot)
             except Exception as e:
-                print(f"구독자 콜백 오류: {e}")
+                # print(f"구독자 콜백 오류: {e}")
+                pass
+        
+        # print("=== 메트릭 브로드캐스트 완료 ===")
     
     def get_recent_average(self, key: str, seconds: int = 5) -> Optional[float]:
         """최근 N초 평균값 계산"""

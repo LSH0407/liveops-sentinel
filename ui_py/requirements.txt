@@ -1,4 +1,5 @@
-PySide6
-pydantic>=2
+PySide6>=6.5.0
 obsws-python>=1.6.0
-pyinstaller>=5.0
+pyqtgraph>=0.13.0
+Jinja2>=3.1.0
+psutil>=5.9.0

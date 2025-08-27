@@ -105,6 +105,7 @@ class StatusCard(QWidget):
     
     def set_value(self, value: float, units: str = None):
         """값 설정"""
+        print(f"StatusCard '{self.title}' set_value 호출됨: {value}")
         self.current_value = value
         
         # Format value based on magnitude
@@ -117,10 +118,16 @@ class StatusCard(QWidget):
         else:
             formatted_value = f"{value:.2f}"
         
+        print(f"StatusCard '{self.title}' 포맷된 값: {formatted_value}")
         self.value_label.setText(formatted_value)
         
         if units:
             self.units_label.setText(units)
+        
+        # 강제 업데이트
+        self.value_label.repaint()
+        self.update()
+        print(f"StatusCard '{self.title}' 업데이트 완료")
     
     def set_grade(self, grade: str):
         """등급 설정"""

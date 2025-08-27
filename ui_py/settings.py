@@ -1,7 +1,11 @@
 from __future__ import annotations
 import json, os, logging
 from pathlib import Path
-from logging.handlers import RotatingFileHandler
+try:
+    from logging.handlers import RotatingFileHandler
+except ImportError:
+    # PyInstaller 환경에서 fallback
+    RotatingFileHandler = None
 
 APP_DIR  = Path(os.environ.get("APPDATA", Path.home())) / "LiveOpsSentinel"
 CFG_PATH = APP_DIR / "config.json"
@@ -15,6 +19,7 @@ DEFAULTS = {
     "simpleMode": False,
     "theme": "dark",
     "current_bitrate_kbps": 6000,
+    "diagnostic_duration_minutes": 60,  # 진단 모드 기본 시간 (30-180분)
     "obs": {
         "host": "127.0.0.1",
         "port": 4455,
@@ -34,10 +39,15 @@ def setup_logging():
     for handler in logger.handlers[:]:
         logger.removeHandler(handler)
     
-    # 파일 핸들러 (회전)
-    file_handler = RotatingFileHandler(
-        LOG_PATH, maxBytes=1024*1024, backupCount=3, encoding='utf-8'
-    )
+    # 파일 핸들러 (회전 또는 일반)
+    if RotatingFileHandler is not None:
+        file_handler = RotatingFileHandler(
+            LOG_PATH, maxBytes=1024*1024, backupCount=3, encoding='utf-8'
+        )
+    else:
+        # PyInstaller 환경에서 fallback
+        file_handler = logging.FileHandler(LOG_PATH, encoding='utf-8')
+    
     file_handler.setFormatter(logging.Formatter(
         '%(asctime)s - %(levelname)s - %(message)s'
     ))

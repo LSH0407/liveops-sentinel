@@ -4,7 +4,7 @@ import sys, os, json, time
 from core.metric_bus import MetricBus
 from views.dashboard import DashboardView
 from settings import load, save, setup_logging
-from setup_wizard import SetupWizard
+# from setup_wizard import SetupWizard  # 사용하지 않음
 
 def default_backend_path():
     # 빌드 산출물 추정 (필요시 설정창에서 바꿀 수 있음)

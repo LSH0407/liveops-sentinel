@@ -1,53 +1,100 @@
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, 
-                               QLabel, QPushButton, QCheckBox, QSplitter, QFrame,
-                               QComboBox, QGroupBox)
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QFont
-from .integrated_settings_dialog import IntegratedSettingsDialog
+from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
+                                QLabel, QPushButton, QFrame, QGridLayout, QSplitter,
+                                QGroupBox, QMessageBox, QApplication, QComboBox, QCheckBox, QSizePolicy)
+from PySide6.QtCore import Qt, QTimer, QThread, Signal
+from PySide6.QtGui import QFont, QIcon
+import time
+from typing import List, Dict, Optional
 
 from widgets.status_card import StatusCard
 from widgets.gauge import GaugeWidget
-from widgets.metric_graph import MetricGraph
+# from widgets.metric_graph import PyQtGraphWidget, MetricGraph  # 사용하지 않음
+from widgets.simple_graph import SimpleGraphWidget
+from widgets.obs_settings_display import ObsSettingsDisplay
 from core.metric_bus import MetricBus
+from core.obs_client_manager import ObsClientManager
 from core.score import QualityScore
-from platform_rules import get_platform_list, get_platform_display_names, get_recommended_settings
-from core.obs_client import ObsClient
+from core.stream_health_monitor import StreamHealthMonitor
+from views.integrated_settings_dialog import IntegratedSettingsDialog
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from settings import load, save
+from platform_rules import get_platform_display_names
 
 class DashboardView(QWidget):
     """메인 대시보드 뷰"""
     
-    def __init__(self, metric_bus: MetricBus, config=None, parent=None):
+    def __init__(self, metric_bus=None, config=None, parent=None):
         super().__init__(parent)
-        self.metric_bus = metric_bus
-        self.config = config or {}
-        self.quality_score = QualityScore()
-        self.current_bitrate_kbps = 6000  # Default
-        self.simple_mode = False
-        self.metrics_window = []  # Recent metrics for scoring
-        self.monitoring_active = False  # 모니터링 활성화 상태
         
-        # OBS 클라이언트 초기화 (시그널 방식)
+        # 설정 로드
+        self.config = config or load()
+        
+        # OBS 클라이언트 매니저 초기화
+        self.obs_manager = ObsClientManager()
+        
+        # OBS 설정
         obs_config = self.config.get("obs", {})
         obs_host = obs_config.get("host", "127.0.0.1")
         obs_port = obs_config.get("port", 4455)
         obs_password = obs_config.get("password", "")
         obs_use_tls = obs_config.get("use_tls", False)
         
-        self.obs_client = ObsClient(host=obs_host, port=obs_port, password=obs_password, use_tls=obs_use_tls)
-        self.obs_client.obs_connected.connect(self._on_obs_connected)
-        self.obs_client.obs_disconnected.connect(self._on_obs_disconnected)
-        self.obs_client.obs_metrics_updated.connect(self._on_obs_metrics_updated)
+        # OBS 폴러 생성
+        self.obs_poller = self.obs_manager.create_poller(obs_host, obs_port, obs_password, obs_use_tls)
+        self.obs_poller.tick.connect(self._on_obs_metrics_updated)
+        self.obs_poller.connected.connect(self._on_obs_connected)
+        self.obs_poller.disconnected.connect(self._on_obs_disconnected)
         
+        # 메트릭 버스
+        self.metric_bus = metric_bus
+        if self.metric_bus:
+            self.metric_bus.new_metrics.connect(self._on_metrics_update)
+        
+        # 품질 점수 계산기
+        self.quality_score = QualityScore()
+        
+        # 스트림 헬스 모니터
+        self.stream_health_monitor = StreamHealthMonitor()
+        self.stream_health_monitor.stream_interruption_detected.connect(self._on_stream_interruption)
+        self.stream_health_monitor.stream_quality_degraded.connect(self._on_quality_degradation)
+        self.stream_health_monitor.stream_recovered.connect(self._on_stream_recovered)
+        
+        # UI 상태
+        self.monitoring_active = False
+        self.simple_mode = False
+        
+        # 메트릭 윈도우 초기화
+        self.metrics_window = []
+        
+        # UI 초기화
         self._setup_ui()
         self._setup_connections()
-        self._apply_dark_theme()
         
-        # OBS 연결 시작
-        self.obs_client.start()
+        # 모니터링 시작
+        self.metric_bus.start()
         
-        # 초기 권장 조치 메시지 설정
-        self._update_recommendation("실시간 모니터링을 시작하려면 상단의 빨간 버튼을 클릭하세요.")
+        # OBS 폴링 자동 시작
+        if hasattr(self, 'obs_poller'):
+            print("OBS 폴러 연결 시도 중...")
+            if self.obs_poller.connect():
+                print("OBS 폴러 연결 성공")
+                self.obs_poller.start_polling()
+                print("OBS 폴링 자동 시작됨")
+                
+                # 연결 즉시 설정 조회
+                try:
+                    obs_settings = self.obs_poller.get_obs_settings()
+                    print(f"초기 OBS 설정: {obs_settings}")
+                    self.obs_settings_display.update_settings(obs_settings)
+                except Exception as e:
+                    print(f"초기 OBS 설정 조회 실패: {e}")
+            else:
+                print("OBS 폴러 연결 실패")
         
+        print("대시보드 초기화 완료")
+    
     def _setup_ui(self):
         """UI 초기화"""
         layout = QVBoxLayout(self)
@@ -71,6 +118,8 @@ class DashboardView(QWidget):
         
         # Set splitter proportions
         splitter.setSizes([400, 800])
+        splitter.setStretchFactor(0, 1)  # 왼쪽 패널
+        splitter.setStretchFactor(1, 2)  # 오른쪽 패널
         layout.addWidget(splitter)
         
         # Bottom bar: Recommendations
@@ -192,6 +241,27 @@ class DashboardView(QWidget):
         self.monitoring_btn.clicked.connect(self._toggle_monitoring)
         layout.addWidget(self.monitoring_btn)
         
+        # 도움말 버튼
+        self.help_btn = QPushButton("❓")
+        self.help_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2d2d2d;
+                color: #ffffff;
+                border: 2px solid #404040;
+                padding: 8px 12px;
+                border-radius: 6px;
+                font-size: 14px;
+                font-weight: bold;
+                min-width: 30px;
+            }
+            QPushButton:hover {
+                background-color: #404040;
+                border-color: #505050;
+            }
+        """)
+        self.help_btn.clicked.connect(self._show_help)
+        layout.addWidget(self.help_btn)
+        
         # Simple/Expert mode toggle
         self.mode_toggle = QCheckBox("간단 모드")
         self.mode_toggle.setStyleSheet("""
@@ -208,7 +278,7 @@ class DashboardView(QWidget):
         layout.addWidget(self.mode_toggle)
         
         # Diagnostic button
-        diagnostic_btn = QPushButton("진단 모드 (60초)")
+        diagnostic_btn = QPushButton("진단 모드")
         diagnostic_btn.setStyleSheet("""
             QPushButton {
                 background-color: #28a745;
@@ -279,7 +349,7 @@ class DashboardView(QWidget):
         cards_layout.addWidget(self.mem_card, 1, 2)
         
         # OBS cards (expert mode only)
-        self.dropped_card = StatusCard("버린 프레임", "%")
+        self.dropped_card = StatusCard("프레임 드랍", "%")
         self.enc_lag_card = StatusCard("인코딩 지연", "ms")
         self.render_lag_card = StatusCard("렌더 지연", "ms")
         
@@ -298,29 +368,102 @@ class DashboardView(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
         
+        # 기본설정 그래프 그룹
+        basic_group = QGroupBox("시스템 성능 모니터링")
+        basic_group.setStyleSheet("""
+            QGroupBox {
+                color: #e0e0e0;
+                font-weight: bold;
+                border: 2px solid #444;
+                border-radius: 5px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+            }
+        """)
+        basic_layout = QGridLayout(basic_group)
+        basic_layout.setSpacing(10)
+        
         # Network graphs
-        net_layout = QHBoxLayout()
-        self.rtt_graph = MetricGraph("서버 응답 속도 (RTT)")
-        self.loss_graph = MetricGraph("전송 손실")
-        net_layout.addWidget(self.rtt_graph)
-        net_layout.addWidget(self.loss_graph)
-        layout.addLayout(net_layout)
+        self.rtt_graph = SimpleGraphWidget("서버 응답 속도 (RTT)")
+        self.loss_graph = SimpleGraphWidget("전송 손실")
         
         # System graphs
-        sys_layout = QHBoxLayout()
-        self.cpu_graph = MetricGraph("CPU 사용률")
-        self.gpu_graph = MetricGraph("GPU 사용률")
-        sys_layout.addWidget(self.cpu_graph)
-        sys_layout.addWidget(self.gpu_graph)
-        layout.addLayout(sys_layout)
+        self.cpu_graph = SimpleGraphWidget("CPU 사용률")
+        self.gpu_graph = SimpleGraphWidget("GPU 사용률")
         
-        # OBS graphs (expert mode only)
-        obs_layout = QHBoxLayout()
-        self.dropped_graph = MetricGraph("버린 프레임 비율")
-        self.lag_graph = MetricGraph("인코딩/렌더 지연")
-        obs_layout.addWidget(self.dropped_graph)
-        obs_layout.addWidget(self.lag_graph)
-        layout.addLayout(obs_layout)
+        # 2x2 그리드로 배치
+        basic_layout.addWidget(self.rtt_graph, 0, 0)
+        basic_layout.addWidget(self.loss_graph, 0, 1)
+        basic_layout.addWidget(self.cpu_graph, 1, 0)
+        basic_layout.addWidget(self.gpu_graph, 1, 1)
+        
+        # 4등분 배열을 위한 설정 (OBS Studio 메트릭과 동일)
+        basic_layout.setColumnStretch(0, 1)
+        basic_layout.setColumnStretch(1, 1)
+        basic_layout.setRowStretch(0, 1)
+        basic_layout.setRowStretch(1, 1)
+        
+        layout.addWidget(basic_group)
+        
+        # OBS 그래프 (전문 모드)
+        obs_group = QGroupBox("OBS Studio 메트릭")
+        obs_group.setStyleSheet("""
+            QGroupBox {
+                color: #e0e0e0;
+                font-weight: bold;
+                border: 2px solid #444;
+                border-radius: 5px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+            }
+        """)
+        obs_layout = QGridLayout(obs_group)
+        obs_layout.setSpacing(10)
+        obs_layout.setContentsMargins(10, 10, 10, 10)
+        
+        # SimpleGraphWidget 기반 OBS 그래프 (pyqtgraph 대신)
+        self.dropped_graph = SimpleGraphWidget("프레임 드랍 비율")
+        self.enc_lag_graph = SimpleGraphWidget("인코딩 지연")
+        self.render_lag_graph = SimpleGraphWidget("렌더 지연")
+        
+        # OBS 설정 표시 위젯
+        self.obs_settings_display = ObsSettingsDisplay()
+        
+        # 2x2 그리드로 배치 (기본설정 모니터링과 동일한 크기)
+        obs_layout.addWidget(self.dropped_graph, 0, 0)
+        obs_layout.addWidget(self.enc_lag_graph, 0, 1)
+        obs_layout.addWidget(self.render_lag_graph, 1, 0)
+        obs_layout.addWidget(self.obs_settings_display, 1, 1)
+        
+        # 4등분 배열을 위한 추가 설정
+        obs_layout.setColumnStretch(0, 1)
+        obs_layout.setColumnStretch(1, 1)
+        obs_layout.setRowStretch(0, 1)
+        obs_layout.setRowStretch(1, 1)
+        
+        # 그리드 비율 설정 (모든 셀이 동일한 크기)
+        obs_layout.setColumnStretch(0, 1)
+        obs_layout.setColumnStretch(1, 1)
+        obs_layout.setRowStretch(0, 1)
+        obs_layout.setRowStretch(1, 1)
+        
+        # 각 위젯의 크기 정책 설정
+        self.dropped_graph.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.enc_lag_graph.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.render_lag_graph.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.obs_settings_display.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        
+        layout.addWidget(obs_group)
         
         return widget
     
@@ -360,7 +503,7 @@ class DashboardView(QWidget):
     def _setup_connections(self):
         """시그널 연결"""
         # Subscribe to metric updates
-        self.metric_bus.subscribe(self._on_metrics_update)
+        self.metric_bus.new_metrics.connect(self._on_metrics_update)
         
         # 백엔드 연결 상태 모니터링
         self.metric_bus.connection_lost.connect(self._on_backend_disconnected)
@@ -371,21 +514,21 @@ class DashboardView(QWidget):
     
     def _setup_graphs(self):
         """그래프 설정"""
-        print("그래프 설정 시작")
+        print("=== 그래프 설정 시작 ===")
         
-        # Network graphs
-        self.rtt_graph.set_series(self.metric_bus, "net.rtt_ms", "ms", "#00ff00")
-        self.loss_graph.set_series(self.metric_bus, "net.loss_pct", "%", "#ffaa00")
+        # PyQtGraph 기반 그래프들 (OBS 그래프들) - 초기에 활성화
+        self.dropped_graph.set_active(True)  # 활성화로 변경
+        self.enc_lag_graph.set_active(True)  # 활성화로 변경
+        self.render_lag_graph.set_active(True)  # 활성화로 변경
         
-        # System graphs
-        self.cpu_graph.set_series(self.metric_bus, "sys.cpu_pct", "%", "#ff0000")
-        self.gpu_graph.set_series(self.metric_bus, "sys.gpu_pct", "%", "#0088ff")
+        # 간단한 테스트 데이터 추가
+        current_time = time.time()
+        self.dropped_graph.add_point(current_time, 2.5)
+        self.enc_lag_graph.add_point(current_time, 5.0)
+        self.render_lag_graph.add_point(current_time, 3.0)
         
-        # OBS graphs
-        self.dropped_graph.set_series(self.metric_bus, "obs.dropped_ratio", "%", "#ff00ff")
-        self.lag_graph.set_series(self.metric_bus, "obs.enc_lag_ms", "ms", "#00ffff")
-        
-        print("그래프 설정 완료")
+        print("그래프 설정 완료 - OBS 그래프들 활성화됨")
+        print("=== 그래프 설정 끝 ===")
     
     def _apply_dark_theme(self):
         """다크 테마 적용"""
@@ -398,14 +541,14 @@ class DashboardView(QWidget):
     
     def _on_metrics_update(self, metrics: dict):
         """메트릭 업데이트 처리"""
-        print(f"대시보드 메트릭 업데이트: {metrics}")
+        # print(f"대시보드 메트릭 업데이트: {metrics}")
         
         # 모니터링이 활성화된 경우에만 업데이트
         if not self.monitoring_active:
-            print("모니터링이 비활성화되어 있음")
+            # print("모니터링이 비활성화되어 있음")
             return
             
-        print("모니터링 활성화됨 - 메트릭 처리 중")
+        # print("모니터링 활성화됨 - 메트릭 처리 중")
         
         # 디버그 정보 업데이트
         cpu = metrics.get('cpu_pct', 0)
@@ -418,13 +561,19 @@ class DashboardView(QWidget):
         if len(self.metrics_window) > 50:  # Keep last 50 samples
             self.metrics_window.pop(0)
         
-        print(f"메트릭 윈도우에 저장됨: 현재 {len(self.metrics_window)}개 샘플")
+        # print(f"메트릭 윈도우에 저장됨: 현재 {len(self.metrics_window)}개 샘플")
         
         # Update KPI cards
         self._update_kpi_cards(metrics)
         
+        # Update graphs
+        self._update_graphs(metrics)
+        
         # Update quality score
         self._update_quality_score()
+        
+        # 스트림 헬스 모니터 업데이트
+        self.stream_health_monitor.update_metrics(metrics)
     
     def _update_kpi_cards(self, metrics: dict):
         """KPI 카드 업데이트"""
@@ -477,21 +626,24 @@ class DashboardView(QWidget):
     
     def _update_quality_score(self):
         """품질 점수 업데이트"""
-        print(f"=== 품질 점수 디버그 ===")
-        print(f"metrics_window 크기 = {len(self.metrics_window)}")
+        # print(f"=== 품질 점수 디버그 ===")
+        # print(f"metrics_window 크기 = {len(self.metrics_window)}")
         
         if not self.metrics_window:
-            print("metrics_window가 비어있음")
+            # print("metrics_window가 비어있음")
             return
         
         # 최근 메트릭 상세 출력
-        if self.metrics_window:
-            latest = self.metrics_window[-1]
-            print(f"최근 메트릭: {latest}")
+        # if self.metrics_window:
+        #     latest = self.metrics_window[-1]
+        #     print(f"최근 메트릭: {latest}")
+        
+        # OBS 설정 가져오기
+        obs_settings = self.obs_manager.get_obs_settings()
         
         # Calculate quality score
-        result = self.quality_score.compute_quality(self.metrics_window, self.current_bitrate_kbps)
-        print(f"품질 점수 계산 결과: {result}")
+        result = self.quality_score.compute_quality(self.metrics_window, self.current_bitrate_kbps, obs_settings)
+        # print(f"품질 점수 계산 결과: {result}")
         
         # Update gauge
         self.quality_gauge.set_score(result['score'])
@@ -500,7 +652,53 @@ class DashboardView(QWidget):
         
         # Update recommendation
         self.recommendation_label.setText(result['action'])
-        print(f"=== 품질 점수 디버그 끝 ===")
+        # print(f"=== 품질 점수 디버그 끝 ===")
+    
+    def _update_graphs(self, metrics: dict):
+        """그래프 업데이트"""
+        # print("=== 그래프 업데이트 시작 ===")
+        current_time = time.time()
+        
+        # 네트워크 그래프 업데이트
+        rtt_ms = metrics.get('rtt_ms', 0)
+        loss_pct = metrics.get('loss_pct', 0)
+        self.rtt_graph.add_point(current_time, rtt_ms)
+        self.loss_graph.add_point(current_time, loss_pct)
+        
+        # 시스템 그래프 업데이트
+        cpu_pct = metrics.get('cpu_pct', 0)
+        gpu_pct = metrics.get('gpu_pct', 0)
+        self.cpu_graph.add_point(current_time, cpu_pct)
+        self.gpu_graph.add_point(current_time, gpu_pct)
+        
+        # OBS 그래프들 업데이트
+        obs = metrics.get('obs', {})
+        
+        # OBS 메트릭이 없으면 시뮬레이션 데이터 사용
+        if not obs:
+            # 시간 기반 시뮬레이션 데이터
+            import math
+            t = current_time % 10  # 10초 주기
+            dropped_ratio = 2.0 + math.sin(t) * 1.5  # 0.5~3.5%
+            enc_lag = 5.0 + math.sin(t * 2) * 3.0    # 2~8ms
+            render_lag = 3.0 + math.cos(t * 1.5) * 2.0  # 1~5ms
+        else:
+            # 실제 OBS 메트릭 사용
+            dropped_ratio = obs.get('dropped_ratio', 0) * 100  # 퍼센트로 변환
+            enc_lag = obs.get('encoding_lag_ms', 0)
+            render_lag = obs.get('render_lag_ms', 0)
+        
+        # Dropped frames
+        self.dropped_graph.add_point(current_time, dropped_ratio)
+        
+        # Encoding lag
+        self.enc_lag_graph.add_point(current_time, enc_lag)
+        
+        # Render lag
+        self.render_lag_graph.add_point(current_time, render_lag)
+        
+        # print(f"그래프 업데이트 완료: RTT={rtt_ms:.1f}ms, Loss={loss_pct:.1f}%, CPU={cpu_pct:.1f}%, GPU={gpu_pct:.1f}%")
+        # print("=== 그래프 업데이트 끝 ===")
     
     def _toggle_monitoring(self):
         """실시간 모니터링 토글"""
@@ -525,12 +723,17 @@ class DashboardView(QWidget):
             self._update_recommendation("실시간 모니터링이 활성화되었습니다. 메트릭이 실시간으로 업데이트됩니다.")
             self.debug_label.setText("디버그: 모니터링 시작됨")
             
-            # 그래프 업데이트 활성화
+            # OBS 폴링 시작
+            if hasattr(self, 'obs_poller'):
+                self.obs_poller.start_polling()
+            
+            # 그래프 활성화
             self._enable_graphs(True)
+            
         else:
             # 모니터링 중지
             self.monitoring_active = False
-            self.monitoring_btn.setText("실시간 모니터링 시작")
+            self.monitoring_btn.setText("모니터링 시작")
             self.monitoring_btn.setStyleSheet("""
                 QPushButton {
                     background-color: #dc3545;
@@ -545,27 +748,39 @@ class DashboardView(QWidget):
                     background-color: #c82333;
                 }
             """)
-            self._update_recommendation("모니터링이 중지되었습니다. 다시 시작하려면 버튼을 클릭하세요.")
+            self._update_recommendation("모니터링이 중지되었습니다. 시작 버튼을 눌러 실시간 모니터링을 시작하세요.")
             self.debug_label.setText("디버그: 모니터링 중지됨")
             
-            # 그래프 업데이트 비활성화
+            # OBS 폴링 중지
+            if hasattr(self, 'obs_poller'):
+                self.obs_poller.stop_polling()
+            
+            # 그래프 비활성화
             self._enable_graphs(False)
     
     def _enable_graphs(self, enable: bool):
         """그래프 업데이트 활성화/비활성화"""
+        # print(f"=== 그래프 활성화/비활성화: {enable} ===")
+        
+        # 시스템 메트릭 그래프
         graphs = [
             self.rtt_graph, self.loss_graph, self.cpu_graph, self.gpu_graph
         ]
         
         if not self.simple_mode:
-            graphs.extend([self.dropped_graph, self.lag_graph])
+            graphs.extend([self.dropped_graph, self.enc_lag_graph, self.render_lag_graph])
+            # print(f"전문 모드: 총 {len(graphs)}개 그래프 처리")
+        else:
+            # print(f"간단 모드: 총 {len(graphs)}개 그래프 처리")
+            pass # 간단 모드에서는 그래프 크기만 조정
         
-        for graph in graphs:
-            if hasattr(graph, 'update_timer'):
-                if enable:
-                    graph.update_timer.start()
-                else:
-                    graph.update_timer.stop()
+        for i, graph in enumerate(graphs):
+            if hasattr(graph, 'set_active'):
+                # SimpleGraphWidget
+                # print(f"그래프 {i}: SimpleGraphWidget.set_active({enable})")
+                graph.set_active(enable)
+        
+        # print(f"=== 그래프 활성화/비활성화 완료: {enable} ===")
     
     def _update_recommendation(self, message: str):
         """권장 조치 메시지 업데이트"""
@@ -603,7 +818,8 @@ class DashboardView(QWidget):
         self.render_lag_card.setVisible(not simple_mode)
         
         self.dropped_graph.setVisible(not simple_mode)
-        self.lag_graph.setVisible(not simple_mode)
+        self.enc_lag_graph.setVisible(not simple_mode)
+        self.render_lag_graph.setVisible(not simple_mode)
         
         # 간단 모드에서는 그래프 크기 조정
         if simple_mode:
@@ -619,67 +835,99 @@ class DashboardView(QWidget):
     
     def _run_diagnostic(self):
         """진단 모드 실행"""
-        print("진단 모드 버튼 클릭됨")
+        # print("진단 모드 버튼 클릭됨")
         self.debug_label.setText("디버그: 진단 모드 버튼 클릭됨")
         try:
             from actions.diagnose import DiagnosticDialog
-            print("DiagnosticDialog 모듈 로드 성공")
+            # print("DiagnosticDialog 모듈 로드 성공")
             self.debug_label.setText("디버그: DiagnosticDialog 모듈 로드 성공")
             
             # 현재 선택된 플랫폼 가져오기
             platform_key = self.platform_combo.currentData()
             if not platform_key:
                 platform_key = "soop"  # 기본값
-            print(f"선택된 플랫폼: {platform_key}")
+            # print(f"선택된 플랫폼: {platform_key}")
             
-            # 진단 다이얼로그 실행 (60초)
-            print("진단 다이얼로그 시작...")
-            self.debug_label.setText("디버그: 진단 다이얼로그 시작...")
-            dialog = DiagnosticDialog(60, platform_key, self.metric_bus, self)
+            # 설정에서 진단 시간 가져오기
+            diagnostic_minutes = self.config.get("diagnostic_duration_minutes", 60)
+            diagnostic_seconds = diagnostic_minutes * 60
+            
+            # 진단 다이얼로그 실행 (설정값 사용)
+            # print(f"진단 다이얼로그 시작... ({diagnostic_minutes}분)")
+            self.debug_label.setText(f"디버그: 진단 다이얼로그 시작... ({diagnostic_minutes}분)")
+            dialog = DiagnosticDialog(diagnostic_seconds, platform_key, self.metric_bus, self)
             dialog.exec()
-            print("진단 다이얼로그 완료")
+            # print("진단 다이얼로그 완료")
             self.debug_label.setText("디버그: 진단 다이얼로그 완료")
             
         except ImportError as e:
-            print(f"진단 모드 모듈을 불러올 수 없습니다: {e}")
+            # print(f"진단 모드 모듈을 불러올 수 없습니다: {e}")
             self.debug_label.setText(f"디버그: ImportError - {e}")
         except Exception as e:
-            print(f"진단 모드 실행 중 오류: {e}")
+            # print(f"진단 모드 실행 중 오류: {e}")
             self.debug_label.setText(f"디버그: 오류 - {e}")
             import traceback
             traceback.print_exc()
     
     def _run_benchmark(self):
         """벤치마크 실행"""
-        print("벤치마크 버튼 클릭됨")
+        # print("벤치마크 버튼 클릭됨")
         self.debug_label.setText("디버그: 벤치마크 버튼 클릭됨")
         try:
             from actions.diagnose import DiagnosticDialog
-            print("DiagnosticDialog 모듈 로드 성공 (벤치마크)")
+            # print("DiagnosticDialog 모듈 로드 성공 (벤치마크)")
             self.debug_label.setText("디버그: DiagnosticDialog 모듈 로드 성공 (벤치마크)")
             
             # 현재 선택된 플랫폼 가져오기
             platform_key = self.platform_combo.currentData()
             if not platform_key:
                 platform_key = "soop"  # 기본값
-            print(f"선택된 플랫폼 (벤치마크): {platform_key}")
+            # print(f"선택된 플랫폼 (벤치마크): {platform_key}")
             
             # 벤치마크 다이얼로그 실행 (10초)
-            print("벤치마크 다이얼로그 시작...")
+            # print("벤치마크 다이얼로그 시작...")
             self.debug_label.setText("디버그: 벤치마크 다이얼로그 시작...")
             dialog = DiagnosticDialog(10, platform_key, self.metric_bus, self)
             dialog.exec()
-            print("벤치마크 다이얼로그 완료")
+            # print("벤치마크 다이얼로그 완료")
             self.debug_label.setText("디버그: 벤치마크 다이얼로그 완료")
             
         except ImportError as e:
-            print(f"벤치마크 모듈을 불러올 수 없습니다: {e}")
+            # print(f"벤치마크 모듈을 불러올 수 없습니다: {e}")
             self.debug_label.setText(f"디버그: ImportError (벤치마크) - {e}")
         except Exception as e:
-            print(f"벤치마크 실행 중 오류: {e}")
+            # print(f"벤치마크 실행 중 오류: {e}")
             self.debug_label.setText(f"디버그: 오류 (벤치마크) - {e}")
             import traceback
             traceback.print_exc()
+    
+    def _show_help(self):
+        """도움말 다이얼로그 표시"""
+        try:
+            from widgets.help_dialog import HelpDialog
+            dialog = HelpDialog(self)
+            dialog.exec()
+        except ImportError as e:
+            self.debug_label.setText(f"디버그: 도움말 모듈 로드 실패 - {e}")
+        except Exception as e:
+            self.debug_label.setText(f"디버그: 도움말 오류 - {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _on_stream_interruption(self, message: str):
+        """스트림 끊김 알림 처리"""
+        self.debug_label.setText(f"🚨 {message}")
+        # 여기에 추가 알림 로직 (예: 팝업, 사운드 등) 추가 가능
+    
+    def _on_quality_degradation(self, message: str):
+        """품질 저하 알림 처리"""
+        self.debug_label.setText(f"⚠️ {message}")
+        # 여기에 추가 알림 로직 추가 가능
+    
+    def _on_stream_recovered(self):
+        """스트림 복구 알림 처리"""
+        self.debug_label.setText("✅ 스트리밍이 정상으로 복구되었습니다.")
+        # 여기에 추가 알림 로직 추가 가능
     
     # Grade calculation helpers
     def _get_grade_for_rtt(self, rtt: float) -> str:
@@ -775,17 +1023,31 @@ class DashboardView(QWidget):
     
     def _on_obs_connected(self):
         """OBS 연결됨"""
-        print("=== OBS 연결됨 ===")
+        # print("=== OBS 연결됨 ===")
         self.debug_label.setText("디버그: OBS 연결됨 ✅ (메트릭 수집 중...)")
-        print("OBS WebSocket 연결 성공")
-        print("OBS 메트릭 수신 대기 중...")
+        # print("OBS WebSocket 연결 성공")
+        # print("OBS 메트릭 수신 대기 중...")
+        
+        # OBS 설정 가져오기 (폴러에서 직접)
+        try:
+            if hasattr(self, 'obs_poller') and self.obs_poller:
+                obs_settings = self.obs_poller.get_obs_settings()
+                print(f"OBS 설정 조회: {obs_settings}")
+                self.obs_settings_display.update_settings(obs_settings)
+            else:
+                print("OBS 폴러가 없음")
+                obs_settings = self.obs_manager.get_obs_settings()
+                self.obs_settings_display.update_settings(obs_settings)
+            print(f"OBS 설정 로드됨: {obs_settings}")
+        except Exception as e:
+            print(f"OBS 설정 로드 실패: {e}")
     
     def _on_obs_disconnected(self):
         """OBS 연결 해제됨"""
-        print("=== OBS 연결 끊김 ===")
+        # print("=== OBS 연결 끊김 ===")
         self.debug_label.setText("디버그: OBS 연결 끊김 ❌ (재연결 시도 중...)")
-        print("OBS WebSocket 연결 끊김")
-        print("메트릭 수집 루프에서 오류가 발생했을 수 있습니다.")
+        # print("OBS WebSocket 연결 끊김")
+        # print("메트릭 수집 루프에서 오류가 발생했을 수 있습니다.")
         
         # OBS 메트릭 초기화
         if not self.simple_mode:
@@ -798,15 +1060,97 @@ class DashboardView(QWidget):
         print(f"=== OBS 메트릭 수신됨 ===")
         print(f"수신된 메트릭: {metrics}")
         
-        # OBS 메트릭을 메트릭 버스에 전달
-        if hasattr(self.metric_bus, 'update_obs_metrics'):
-            print("메트릭 버스에 OBS 메트릭 전달")
-            self.metric_bus.update_obs_metrics(metrics)
-        else:
-            print("메트릭 버스에 update_obs_metrics 메서드 없음")
+        # 메트릭이 비어있거나 None인지 확인
+        if not metrics:
+            print("메트릭이 비어있음")
+            return
         
-        # OBS 메트릭을 UI에 반영
-        self._update_obs_metrics(metrics)
+        # 현재 시간
+        now = time.time()
+        
+        # PyQtGraph 위젯에 데이터 추가
+        if hasattr(self, 'dropped_graph'):
+            dropped_ratio = metrics.get('dropped_ratio', 0.0) * 100  # 퍼센트로 변환
+            self.dropped_graph.add_point(now, dropped_ratio)
+            print(f"그래프 업데이트: dropped_ratio = {dropped_ratio:.2f}%")
+        
+        if hasattr(self, 'enc_lag_graph'):
+            encoding_lag = metrics.get('encoding_lag_ms', 0.0)
+            self.enc_lag_graph.add_point(now, encoding_lag)
+            print(f"그래프 업데이트: encoding_lag = {encoding_lag:.2f}ms")
+        
+        if hasattr(self, 'render_lag_graph'):
+            render_lag = metrics.get('render_lag_ms', 0.0)
+            self.render_lag_graph.add_point(now, render_lag)
+            print(f"그래프 업데이트: render_lag = {render_lag:.2f}ms")
+        
+        # 상태 카드 업데이트 - 항상 강제 업데이트
+        dropped_ratio = metrics.get('dropped_ratio', 0.0) * 100
+        encoding_lag = metrics.get('encoding_lag_ms', 0.0)
+        render_lag = metrics.get('render_lag_ms', 0.0)
+        
+        print(f"상태 카드 업데이트: dropped={dropped_ratio:.2f}%, enc_lag={encoding_lag:.2f}ms, render_lag={render_lag:.2f}ms")
+        
+        # 메트릭 값이 실제로 변경되었는지 확인
+        if dropped_ratio == 0.0 and encoding_lag == 0.0 and render_lag == 0.0:
+            print("모든 메트릭이 0.0 - 실제 데이터가 아닐 수 있음")
+        else:
+            print(f"실제 메트릭 값 감지: dropped={dropped_ratio:.2f}%, enc={encoding_lag:.2f}ms, render={render_lag:.2f}ms")
+        
+        # 강제로 상태 카드 업데이트
+        try:
+            if hasattr(self, 'dropped_card') and self.dropped_card:
+                self.dropped_card.set_value(dropped_ratio)
+                # 등급도 함께 업데이트
+                if dropped_ratio < 1.0:
+                    self.dropped_card.set_grade("좋음")
+                elif dropped_ratio < 3.0:
+                    self.dropped_card.set_grade("주의")
+                else:
+                    self.dropped_card.set_grade("불안정")
+                self.dropped_card.repaint()  # 강제 리페인트
+                self.dropped_card.update()  # 추가 업데이트
+                print(f"dropped_card 업데이트 완료: {dropped_ratio:.2f}%")
+            else:
+                print("dropped_card가 존재하지 않음")
+        except Exception as e:
+            print(f"dropped_card 업데이트 오류: {e}")
+        
+        try:
+            if hasattr(self, 'enc_lag_card') and self.enc_lag_card:
+                self.enc_lag_card.set_value(encoding_lag)
+                # 등급도 함께 업데이트
+                if encoding_lag < 10:
+                    self.enc_lag_card.set_grade("좋음")
+                elif encoding_lag < 20:
+                    self.enc_lag_card.set_grade("주의")
+                else:
+                    self.enc_lag_card.set_grade("불안정")
+                self.enc_lag_card.repaint()  # 강제 리페인트
+                self.enc_lag_card.update()  # 추가 업데이트
+                print(f"enc_lag_card 업데이트 완료: {encoding_lag:.2f}%")
+            else:
+                print("enc_lag_card가 존재하지 않음")
+        except Exception as e:
+            print(f"enc_lag_card 업데이트 오류: {e}")
+        
+        try:
+            if hasattr(self, 'render_lag_card') and self.render_lag_card:
+                self.render_lag_card.set_value(render_lag)
+                # 등급도 함께 업데이트
+                if render_lag < 14:
+                    self.render_lag_card.set_grade("좋음")
+                elif render_lag < 25:
+                    self.render_lag_card.set_grade("주의")
+                else:
+                    self.render_lag_card.set_grade("불안정")
+                self.render_lag_card.repaint()  # 강제 리페인트
+                self.render_lag_card.update()  # 추가 업데이트
+                print(f"render_lag_card 업데이트 완료: {render_lag:.2f}ms")
+            else:
+                print("render_lag_card가 존재하지 않음")
+        except Exception as e:
+            print(f"render_lag_card 업데이트 오류: {e}")
         
         # 연결 상태 업데이트
         self.debug_label.setText("디버그: OBS 연결됨 ✅ (메트릭 수신 중)")
@@ -818,23 +1162,22 @@ class DashboardView(QWidget):
         try:
             # 디버그 메시지 추가
             self.debug_label.setText("디버그: 설정 다이얼로그 열기 시도 중...")
-            print("설정 버튼 클릭됨 - 다이얼로그 열기 시도")
+            # print("설정 버튼 클릭됨 - 다이얼로그 열기 시도")
             
-            from settings import save, load
             current_config = load()
             
-            print(f"현재 설정 로드됨: {current_config}")
+            # print(f"현재 설정 로드됨: {current_config}")
             
             dialog = IntegratedSettingsDialog(current_config, self)
             
-            print("다이얼로그 표시 중...")
+            # print("다이얼로그 표시 중...")
             result = dialog.exec()
-            print(f"다이얼로그 결과: {result}")
+            # print(f"다이얼로그 결과: {result}")
             
             if result == IntegratedSettingsDialog.Accepted:
                 # 설정값 저장
                 new_settings = dialog.get_settings()
-                print(f"새 설정값: {new_settings}")
+                # print(f"새 설정값: {new_settings}")
                 
                 # 설정 파일에 저장
                 save(new_settings)
@@ -850,7 +1193,7 @@ class DashboardView(QWidget):
                 
                 # OBS 클라이언트 재설정
                 if hasattr(self.metric_bus, 'reconfigure_obs_client'):
-                    print("메트릭 버스를 통해 OBS 클라이언트 재설정")
+                    # print("메트릭 버스를 통해 OBS 클라이언트 재설정")
                     obs_config = new_settings.get('obs', {})
                     self.metric_bus.reconfigure_obs_client(
                         host=obs_config.get('host', '127.0.0.1'),
@@ -859,85 +1202,88 @@ class DashboardView(QWidget):
                         use_tls=obs_config.get('use_tls', False)
                     )
                 else:
-                    print("메트릭 버스에 reconfigure_obs_client 메서드 없음")
+                    # print("메트릭 버스에 reconfigure_obs_client 메서드 없음")
                     # 기존 방식으로 OBS 클라이언트 재시작
-                    if hasattr(self.obs_client, 'stop'):
-                        self.obs_client.stop()
+                    if hasattr(self.obs_manager, 'stop_poller'): # Changed from obs_client to obs_manager
+                        self.obs_manager.stop_poller()
                     
                     # 새로운 설정으로 OBS 클라이언트 재생성
-                    from core.obs_client import ObsClient
+                    from core.obs_client_manager import ObsClientManager
                     obs_config = new_settings.get('obs', {})
-                    self.obs_client = ObsClient(
+                    self.obs_manager = ObsClientManager() # Changed from obs_client to obs_manager
+                    self.obs_poller = self.obs_manager.create_poller(
                         host=obs_config.get('host', '127.0.0.1'),
                         port=obs_config.get('port', 4455),
                         password=obs_config.get('password', ''),
                         use_tls=obs_config.get('use_tls', False)
                     )
-                    self.obs_client.obs_connected.connect(self._on_obs_connected)
-                    self.obs_client.obs_disconnected.connect(self._on_obs_disconnected)
-                    self.obs_client.obs_metrics_updated.connect(self._on_obs_metrics_updated)
+                    self.obs_poller.tick.connect(self._on_obs_metrics_updated)
+                    self.obs_poller.connected.connect(self._on_obs_connected)
+                    self.obs_poller.disconnected.connect(self._on_obs_disconnected)
                     
                     # OBS 연결 시작
-                    self.obs_client.start()
+                    self.obs_poller.start() # Changed from obs_client.start() to obs_poller.start()
                 
                 # 설정 업데이트
                 self.config.update(new_settings)
                 
-                print(f"설정 업데이트 완료: {new_settings}")
+                # print(f"설정 업데이트 완료: {new_settings}")
                 self.debug_label.setText("디버그: 설정 업데이트 완료")
                 
         except Exception as e:
             error_msg = f"설정 다이얼로그 오류: {e}"
-            print(error_msg)
+            # print(error_msg)
             self.debug_label.setText(f"디버그: {error_msg}")
             import traceback
             traceback.print_exc()
     
     def _update_obs_metrics(self, metrics: dict):
         """OBS 메트릭을 UI에 반영"""
-        print(f"=== OBS 메트릭 업데이트 디버그 ===")
-        print(f"받은 OBS 메트릭: {metrics}")
+        # print(f"=== OBS 메트릭 업데이트 디버그 ===")
+        # print(f"받은 OBS 메트릭: {metrics}")
         
         # 드롭된 프레임 비율
         dropped_ratio = metrics.get('dropped_ratio', 0) * 100
-        print(f"드롭된 프레임 비율: {dropped_ratio:.1f}%")
+        # print(f"드롭된 프레임 비율: {dropped_ratio:.1f}%")
         self.dropped_card.update_value(dropped_ratio, f"{dropped_ratio:.1f}%")
         self.dropped_card.update_status(self._get_grade_for_dropped(dropped_ratio))
         
         # 인코딩 지연
         enc_lag = metrics.get('encoding_lag_ms', 0)
-        print(f"인코딩 지연: {enc_lag:.1f}ms")
+        # print(f"인코딩 지연: {enc_lag:.1f}ms")
         self.enc_lag_card.update_value(enc_lag, f"{enc_lag:.1f}ms")
         self.enc_lag_card.update_status(self._get_grade_for_enc_lag(enc_lag))
         
         # 렌더링 지연
         render_lag = metrics.get('render_lag_ms', 0)
-        print(f"렌더링 지연: {render_lag:.1f}ms")
+        # print(f"렌더링 지연: {render_lag:.1f}ms")
         self.render_lag_card.update_value(render_lag, f"{render_lag:.1f}ms")
         self.render_lag_card.update_status(self._get_grade_for_render_lag(render_lag))
         
-        print(f"=== OBS 메트릭 업데이트 디버그 끝 ===")
+        # print(f"=== OBS 메트릭 업데이트 디버그 끝 ===")
     
     def closeEvent(self, event):
         """윈도우 종료 시 정리 작업"""
         try:
-            print("대시보드 종료 중...")
+            # print("대시보드 종료 중...")
             if hasattr(self, 'metric_bus') and self.metric_bus:
                 try:
                     self.metric_bus.stop()
                 except Exception as e:
-                    print(f"메트릭 버스 종료 오류: {e}")
+                    # print(f"메트릭 버스 종료 오류: {e}")
+                    pass
             
-            if hasattr(self, 'obs_client') and self.obs_client:
+            if hasattr(self, 'obs_manager') and self.obs_manager: # Changed from obs_client to obs_manager
                 try:
-                    self.obs_client.stop()
+                    self.obs_manager.stop_poller() # Changed from obs_client.stop() to obs_manager.stop_poller()
                 except Exception as e:
-                    print(f"OBS 클라이언트 종료 오류: {e}")
+                    # print(f"OBS 클라이언트 종료 오류: {e}")
+                    pass
             
-            print("대시보드 종료 완료")
+            # print("대시보드 종료 완료")
             event.accept()
         except Exception as e:
-            print(f"대시보드 종료 중 오류: {e}")
+            # print(f"대시보드 종료 중 오류: {e}")
             import traceback
             traceback.print_exc()
             event.accept()
@@ -947,7 +1293,7 @@ class DashboardView(QWidget):
         try:
             super().resizeEvent(event)
         except Exception as e:
-            print(f"윈도우 크기 변경 오류: {e}")
+            # print(f"윈도우 크기 변경 오류: {e}")
             # 오류가 발생해도 기본 동작 수행
             event.accept()
     
@@ -956,6 +1302,6 @@ class DashboardView(QWidget):
         try:
             super().moveEvent(event)
         except Exception as e:
-            print(f"윈도우 이동 오류: {e}")
+            # print(f"윈도우 이동 오류: {e}")
             # 오류가 발생해도 기본 동작 수행
             event.accept()

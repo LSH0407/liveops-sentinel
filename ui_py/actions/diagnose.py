@@ -39,6 +39,10 @@ class DiagnosticWorker(QThread):
             progress = int((elapsed / self.duration_seconds) * 100)
             self.progress_updated.emit(min(progress, 100))
             
+            # 마지막 1초에서는 100%로 설정
+            if elapsed >= self.duration_seconds - 1:
+                self.progress_updated.emit(100)
+            
             # 메트릭 수집
             if hasattr(self.metric_bus, 'get_latest_metrics'):
                 metrics = self.metric_bus.get_latest_metrics()

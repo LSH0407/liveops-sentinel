@@ -3,6 +3,202 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame
 from PySide6.QtGui import QPainter, QPen, QBrush, QColor, QPolygonF, QFont
 import time
 from typing import List, Tuple, Optional, Dict
+import pyqtgraph as pg
+
+# pyqtgraph 설정
+pg.setConfigOptions(antialias=True)
+pg.setConfigOption('background', 'black')
+pg.setConfigOption('foreground', 'white')
+
+class RingSeries:
+    """60초/4Hz 링 버퍼 (240개 포인트)"""
+    
+    def __init__(self, max_points: int = 240):
+        self.max_points = max_points
+        self.x_data = []
+        self.y_data = []
+        self.start_time = time.time()
+    
+    def add_point(self, timestamp: float, value: float):
+        """새 포인트 추가"""
+        # print(f"RingSeries.add_point: timestamp={timestamp}, value={value}")
+        self.x_data.append(timestamp)
+        self.y_data.append(value)
+        
+        # 링 버퍼 크기 유지
+        if len(self.x_data) > self.max_points:
+            self.x_data.pop(0)
+            self.y_data.pop(0)
+        
+        # print(f"RingSeries 데이터 추가 완료. 현재 크기: x={len(self.x_data)}, y={len(self.y_data)}")
+    
+    def get_data(self) -> Tuple[List[float], List[float]]:
+        """현재 데이터 반환"""
+        return self.x_data, self.y_data
+    
+    def clear(self):
+        """데이터 초기화"""
+        self.x_data.clear()
+        self.y_data.clear()
+        self.start_time = time.time()
+
+class PyQtGraphWidget(QWidget):
+    """pyqtgraph 기반 실시간 그래프"""
+    
+    def __init__(self, title: str = "", parent=None):
+        super().__init__(parent)
+        self.title = title
+        self.ring_series = RingSeries()
+        self.curve = None
+        self.plot_widget = None
+        self.update_timer = None
+        self.is_active = False
+        
+        self._setup_ui()
+        self._setup_timer()
+    
+    def _setup_ui(self):
+        """UI 초기화"""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Title
+        if self.title:
+            title_label = QLabel(self.title)
+            title_label.setStyleSheet("font-weight: bold; font-size: 12px; color: #e0e0e0;")
+            layout.addWidget(title_label)
+        
+        # pyqtgraph 위젯
+        self.plot_widget = pg.PlotWidget()
+        self.plot_widget.setBackground('black')
+        self.plot_widget.showGrid(x=True, y=True, alpha=0.3)
+        self.plot_widget.setLabel('left', 'Value')
+        self.plot_widget.setLabel('bottom', 'Time (s)')
+        
+        # 렌더링 모드 설정
+        self.plot_widget.setAntialiasing(True)
+        self.plot_widget.setDownsampling(auto=True, mode='peak')
+        
+        # Windows 호환성을 위한 추가 설정
+        self.plot_widget.setRenderHint(pg.QtGui.QPainter.Antialiasing, True)
+        self.plot_widget.setRenderHint(pg.QtGui.QPainter.SmoothPixmapTransform, True)
+        
+        # 그래프 스타일 강화
+        self.plot_widget.setStyleSheet("border: 2px solid #444; background-color: black;")
+        self.plot_widget.setTitle(self.title if self.title else "Real-time Graph")
+        
+        # 그래프 크기 설정
+        self.plot_widget.setMinimumHeight(150)
+        self.plot_widget.setMinimumWidth(300)
+        self.plot_widget.setMaximumHeight(200)
+        self.plot_widget.setMaximumWidth(400)
+        
+        # X축 범위 설정 (0~60초)
+        self.plot_widget.setXRange(0, 60)
+        
+        # 다크 테마 적용
+        self.plot_widget.getAxis('left').setPen(pg.mkPen(color='white'))
+        self.plot_widget.getAxis('bottom').setPen(pg.mkPen(color='white'))
+        self.plot_widget.getAxis('left').setTextPen(pg.mkPen(color='white'))
+        self.plot_widget.getAxis('bottom').setTextPen(pg.mkPen(color='white'))
+        
+        layout.addWidget(self.plot_widget)
+        
+        # 테스트용 라벨 추가 (그래프가 보이지 않을 때 확인용)
+        self.test_label = QLabel("그래프 테스트 - 데이터 수: 0")
+        self.test_label.setStyleSheet("color: #00FF00; font-size: 10px; background-color: #333; padding: 2px;")
+        layout.addWidget(self.test_label)
+    
+    def _setup_timer(self):
+        """업데이트 타이머 설정"""
+        self.update_timer = QTimer()
+        self.update_timer.timeout.connect(self._update_graph)
+        self.update_timer.start(250)  # 4Hz
+    
+    def set_active(self, active: bool):
+        """그래프 활성화/비활성화"""
+        # print(f"PyQtGraphWidget.set_active: {active}")
+        self.is_active = active
+        if not active:
+            # print("PyQtGraphWidget: 타이머 중지")
+            self.update_timer.stop()
+        else:
+            # print("PyQtGraphWidget: 타이머 시작 (250ms)")
+            self.update_timer.start(250)
+    
+    def add_point(self, timestamp: float, value: float):
+        """새 데이터 포인트 추가"""
+        print(f"PyQtGraphWidget.add_point: timestamp={timestamp}, value={value}")
+        self.ring_series.add_point(timestamp, value)
+        print(f"RingSeries에 포인트 추가됨. 현재 데이터 개수: {len(self.ring_series.x_data)}")
+    
+    def _update_graph(self):
+        """그래프 업데이트"""
+        if not self.is_active:
+            print("PyQtGraphWidget._update_graph: 그래프가 비활성화됨")
+            return
+        
+        x_data, y_data = self.ring_series.get_data()
+        print(f"PyQtGraphWidget._update_graph: 데이터 개수 x={len(x_data)}, y={len(y_data)}")
+        if not x_data:
+            print("PyQtGraphWidget._update_graph: 데이터가 없음")
+            return
+        
+        # 현재 시간 기준으로 상대 시간으로 변환 (초 단위)
+        now = time.time()
+        x_relative = [(t - now + 60) for t in x_data]  # 60초 전부터 현재까지
+        
+        # 첫 번째 곡선 생성 또는 기존 곡선 업데이트
+        try:
+            if self.curve is None:
+                print(f"새로운 곡선 생성: x={len(x_relative)}, y={len(y_data)}")
+                self.curve = self.plot_widget.plot(
+                    x_relative, y_data, 
+                    pen=pg.mkPen(color='#00FF00', width=3),  # 밝은 녹색, 더 두꺼운 선
+                    connect='finite',
+                    symbol='o',  # 포인트 표시
+                    symbolSize=3,
+                    symbolBrush='#00FF00'
+                )
+            else:
+                print(f"기존 곡선 업데이트: x={len(x_relative)}, y={len(y_data)}")
+                self.curve.setData(x_relative, y_data, connect='finite')
+            
+            # X축 범위 업데이트 (0초 ~ 60초)
+            self.plot_widget.setXRange(0, 60)
+            
+            # Y축 자동 범위 (최소값 보장)
+            if y_data:
+                y_min = min(y_data)
+                y_max = max(y_data)
+                if y_min == y_max:
+                    y_min -= 1
+                    y_max += 1
+                self.plot_widget.setYRange(y_min, y_max)
+                print(f"Y축 범위 설정: {y_min:.1f} ~ {y_max:.1f}")
+            
+            # 강제 업데이트
+            self.plot_widget.update()
+            self.plot_widget.repaint()
+            self.update()  # 위젯 자체 업데이트
+            
+            # 테스트 라벨 업데이트
+            if hasattr(self, 'test_label'):
+                self.test_label.setText(f"그래프 테스트 - 데이터 수: {len(y_data)}, 최신값: {y_data[-1] if y_data else 0:.2f}")
+            
+            print("그래프 렌더링 완료")
+            
+        except Exception as e:
+            print(f"그래프 렌더링 오류: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def clear(self):
+        """그래프 초기화"""
+        self.ring_series.clear()
+        if self.curve:
+            self.curve.clear()
+            self.curve = None
 
 class SimpleGraphWidget(QFrame):
     """간단한 그래프 위젯 (numpy 없이)"""
@@ -244,7 +440,7 @@ class MetricGraph(QWidget):
         self.graph_widget.set_data(window_data)
         
         # 디버그 출력
-        print(f"그래프 업데이트: {self.metric_key}, 데이터 포인트: {len(window_data)}")
+        # print(f"그래프 업데이트: {self.metric_key}, 데이터 포인트: {len(window_data)}")
     
     def set_title(self, title: str):
         """제목 설정"""
