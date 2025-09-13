@@ -1,4 +1,5 @@
 # LiveOps Sentinel 🚀
+<img width="2084" height="1459" alt="image" src="https://github.com/user-attachments/assets/016ad219-4294-4a24-bb6a-48b4a44f2202" />
 
 **실시간 스트리밍 품질 모니터링 및 최적화 솔루션**
 
